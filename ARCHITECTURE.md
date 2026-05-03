@@ -34,7 +34,7 @@ State lives in SurrealDB. No separate Redis/Postgres/SQLite for queues, locks, o
 
 **Origin:** VISION.md, 2026-05-03.
 
-### Soft-delete only — never hard-delete
+### Soft-delete only — never hard-delete (nodes)
 
 Every node carries a `deleted_at: option<datetime>` field. Tombstone instead of deleting.
 
@@ -43,6 +43,16 @@ Every node carries a `deleted_at: option<datetime>` field. Tombstone instead of 
 **Scope:** All node tables (org, repo, issue, pull_request, discussion, comment, commit, user, label).
 
 **Origin:** VISION.md, 2026-05-03.
+
+### Nodes are historical; edges are relational truth
+
+Nodes carry `deleted_at` and are never hard-deleted — they preserve history of what existed and was authored. Edges, by contrast, reflect the current relation between two nodes; when upstream removes the relation (a label unstuck, a "Closes #N" edited away, a referenced commit dropped from a PR), the local edge is hard-deleted outright. No `deleted_at` on edges.
+
+**Why:** An edge that no longer exists upstream is not history — it's a stale fact. Filtering by `deleted_at` on every traversal would poison query patterns and grow indexes forever. Edges are cheap to recreate idempotently; the cost of preserving them is higher than the cost of recomputing.
+
+**Scope:** All edge tables (`has`, `authored`, `has_label`, `closes`, `fixes`, `references_ref`, `contains_commit`, `in_category`, and any future relation tables). Does not change node soft-delete semantics — nodes still tombstone forever.
+
+**Origin:** Issue #6, 2026-05-03.
 
 ### Embedding dimension is a hard schema decision
 

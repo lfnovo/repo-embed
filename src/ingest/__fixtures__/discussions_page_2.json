@@ -1,0 +1,36 @@
+{
+  "repository": {
+    "discussions": {
+      "nodes": [
+        {
+          "id": "D_003",
+          "url": "https://github.com/test/repo/discussions/3",
+          "number": 3,
+          "title": "Dependency update available",
+          "body": "A new version of a dependency is available",
+          "closedAt": null,
+          "createdAt": "2026-01-04T00:00:00Z",
+          "updatedAt": "2026-01-05T00:00:00Z",
+          "author": {
+            "__typename": "Bot",
+            "id": "B_001",
+            "login": "dependabot[bot]",
+            "url": "https://github.com/apps/dependabot"
+          },
+          "category": {
+            "name": "General",
+            "emoji": ":speech_balloon:",
+            "isAnswerable": false
+          },
+          "answer": null,
+          "answerChosenAt": null,
+          "labels": {
+            "nodes": [],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          }
+        }
+      ],
+      "pageInfo": { "hasNextPage": false, "endCursor": null }
+    }
+  }
+}

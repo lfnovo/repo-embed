@@ -1,0 +1,65 @@
+{
+  "repository": {
+    "discussions": {
+      "nodes": [
+        {
+          "id": "D_001",
+          "url": "https://github.com/test/repo/discussions/1",
+          "number": 1,
+          "title": "How to configure this?",
+          "body": "I need help with configuration\r\ncan you help?",
+          "closedAt": null,
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-02T00:00:00Z",
+          "author": {
+            "__typename": "User",
+            "id": "U_001",
+            "login": "testuser",
+            "url": "https://github.com/testuser"
+          },
+          "category": {
+            "name": "Q&A",
+            "emoji": ":question:",
+            "isAnswerable": true
+          },
+          "answer": { "id": "DC_001" },
+          "answerChosenAt": "2026-01-03T00:00:00Z",
+          "labels": {
+            "nodes": [
+              {
+                "id": "LB_001",
+                "name": "question",
+                "color": "d876e3",
+                "description": "Further information is requested"
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          }
+        },
+        {
+          "id": "D_002",
+          "url": "https://github.com/test/repo/discussions/2",
+          "number": 2,
+          "title": "General feedback",
+          "body": null,
+          "closedAt": null,
+          "createdAt": "2026-01-02T00:00:00Z",
+          "updatedAt": "2026-01-03T00:00:00Z",
+          "author": null,
+          "category": {
+            "name": "General",
+            "emoji": ":speech_balloon:",
+            "isAnswerable": false
+          },
+          "answer": null,
+          "answerChosenAt": null,
+          "labels": {
+            "nodes": [],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          }
+        }
+      ],
+      "pageInfo": { "hasNextPage": true, "endCursor": "cursor1" }
+    }
+  }
+}

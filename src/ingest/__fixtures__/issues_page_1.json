@@ -1,0 +1,55 @@
+{
+  "repository": {
+    "issues": {
+      "pageInfo": { "hasNextPage": true, "endCursor": "cursor1" },
+      "nodes": [
+        {
+          "id": "I_001",
+          "url": "https://github.com/test/repo/issues/1",
+          "number": 1,
+          "title": "First Issue",
+          "body": "Body of first issue\r\nwith CRLF line endings",
+          "state": "OPEN",
+          "stateReason": null,
+          "closedAt": null,
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-02T00:00:00Z",
+          "author": {
+            "__typename": "User",
+            "id": "U_001",
+            "login": "testuser",
+            "url": "https://github.com/testuser"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "LB_001",
+                "name": "bug",
+                "color": "d73a4a",
+                "description": "Something broken"
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          }
+        },
+        {
+          "id": "I_002",
+          "url": "https://github.com/test/repo/issues/2",
+          "number": 2,
+          "title": "Second Issue",
+          "body": null,
+          "state": "CLOSED",
+          "stateReason": "COMPLETED",
+          "closedAt": "2026-01-03T00:00:00Z",
+          "createdAt": "2026-01-01T12:00:00Z",
+          "updatedAt": "2026-01-03T00:00:00Z",
+          "author": null,
+          "labels": {
+            "nodes": [],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          }
+        }
+      ]
+    }
+  }
+}

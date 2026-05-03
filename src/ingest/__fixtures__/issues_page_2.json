@@ -1,0 +1,38 @@
+{
+  "repository": {
+    "issues": {
+      "pageInfo": { "hasNextPage": false, "endCursor": null },
+      "nodes": [
+        {
+          "id": "I_003",
+          "url": "https://github.com/test/repo/issues/3",
+          "number": 3,
+          "title": "Third Issue",
+          "body": "Bot authored issue with dependencies update",
+          "state": "OPEN",
+          "stateReason": null,
+          "closedAt": null,
+          "createdAt": "2026-01-04T00:00:00Z",
+          "updatedAt": "2026-01-05T00:00:00Z",
+          "author": {
+            "__typename": "Bot",
+            "id": "B_001",
+            "login": "dependabot[bot]",
+            "url": "https://github.com/apps/dependabot"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "LB_002",
+                "name": "dependencies",
+                "color": "0075ca",
+                "description": null
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "repository": {
+    "pullRequests": {
+      "pageInfo": { "hasNextPage": true, "endCursor": "pr_cursor_1" },
+      "nodes": [
+        {
+          "id": "PR_001",
+          "url": "https://github.com/test/repo/pull/1",
+          "number": 1,
+          "title": "First PR",
+          "body": "Body of first PR",
+          "state": "OPEN",
+          "closedAt": null,
+          "mergedAt": null,
+          "mergedBy": null,
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-02T00:00:00Z",
+          "author": {
+            "__typename": "User",
+            "id": "U_001",
+            "login": "testuser",
+            "url": "https://github.com/testuser"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "LB_001",
+                "name": "bug",
+                "color": "d73a4a",
+                "description": "Something broken"
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "id": "C_PR1_001",
+                  "url": "https://github.com/test/repo/commit/abc001",
+                  "oid": "abc001",
+                  "messageHeadline": "First commit",
+                  "messageBody": null,
+                  "committedDate": "2026-01-01T10:00:00Z",
+                  "author": { "user": { "__typename": "User", "id": "U_001", "login": "testuser", "url": "https://github.com/testuser" } }
+                }
+              },
+              {
+                "commit": {
+                  "id": "C_PR1_002",
+                  "url": "https://github.com/test/repo/commit/abc002",
+                  "oid": "abc002",
+                  "messageHeadline": "Second commit",
+                  "messageBody": "More details here",
+                  "committedDate": "2026-01-01T12:00:00Z",
+                  "author": { "user": { "__typename": "User", "id": "U_001", "login": "testuser", "url": "https://github.com/testuser" } }
+                }
+              }
+            ],
+            "pageInfo": { "hasNextPage": true, "endCursor": "commit_cursor_1" }
+          },
+          "closingIssuesReferences": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "PR_002",
+          "url": "https://github.com/test/repo/pull/2",
+          "number": 2,
+          "title": "Second PR",
+          "body": null,
+          "state": "MERGED",
+          "closedAt": "2026-01-05T00:00:00Z",
+          "mergedAt": "2026-01-05T00:00:00Z",
+          "mergedBy": null,
+          "createdAt": "2026-01-03T00:00:00Z",
+          "updatedAt": "2026-01-05T00:00:00Z",
+          "author": null,
+          "labels": {
+            "nodes": [],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "id": "C_PR2_001",
+                  "url": "https://github.com/test/repo/commit/def001",
+                  "oid": "def001",
+                  "messageHeadline": "Merged commit",
+                  "messageBody": null,
+                  "committedDate": "2026-01-04T10:00:00Z",
+                  "author": { "user": { "__typename": "User", "id": "U_002", "login": "otheruser", "url": "https://github.com/otheruser" } }
+                }
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          },
+          "closingIssuesReferences": {
+            "nodes": [{ "id": "I_001" }]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,3 +1,6 @@
+import type { Surreal } from "surrealdb";
+import { StringRecordId } from "surrealdb";
+
 // TODO(#8): full implementation per issue #8
 
 export type CrossRef = {
@@ -49,4 +52,36 @@ export function extractReferences(
   }
 
   return results;
+}
+
+// STUB: refined by #8. Stable signature.
+export async function linkClosingIssues(
+  db: Surreal,
+  prRecordId: string,
+  closingIssueNodeIds: string[],
+): Promise<void> {
+  const prRef = new StringRecordId(prRecordId);
+
+  for (const nodeId of closingIssueNodeIds) {
+    const [issueRows] = await db.query<[Array<{ id: unknown }>]>(
+      "SELECT id FROM issue WHERE github_node_id = $nodeId",
+      { nodeId },
+    );
+
+    if (issueRows.length === 0) continue;
+
+    const issueRef = new StringRecordId(String(issueRows[0].id));
+
+    const [edges] = await db.query<[Array<{ id: unknown }>]>(
+      "SELECT id FROM closes WHERE in = $prRef AND out = $issueRef",
+      { prRef, issueRef },
+    );
+
+    if (edges.length === 0) {
+      await db.query(
+        "RELATE $prRef->closes->$issueRef CONTENT { created_at: time::now() }",
+        { prRef, issueRef },
+      );
+    }
+  }
 }

@@ -189,3 +189,15 @@ Helpers that paginate over remote APIs (GitHub GraphQL connections, SurrealDB li
 **Scope:** All fetch/sync code that talks to external paginated APIs. Does not constrain in-memory transforms after persistence.
 
 **Origin:** Issue #1, 2026-05-03.
+
+### Ingest stages are pure functions; orchestrators glue them
+
+`fetch*` functions are DB-agnostic and yield parsed values via async generators. `persist*` functions are pure infrastructure: they take a DB handle and a parsed value, and emit no side effects beyond the DB. The CLI command (`tool sync`) is the only place these are composed.
+
+Cross-cutting concerns (label upsert, user upsert, bot detection) live in their own module and are owned by a specific issue; other ingest stages depend on the stable call site, not on the implementation, so they can ship before the owner refines.
+
+**Why:** Stage independence (per the principle above) is enforced by signatures — a fetcher that knows about the DB will eventually grow side effects that break idempotency. A persister that fetches will couple stage cadence to network. Cross-cutting concerns inevitably appear in 3+ places; "owner issue + stub call site" lets parallel work proceed without blocking on the cross-cutting design.
+
+**Scope:** All ingest code (issues, pull requests, discussions, comments, labels, users, bots) and the sync orchestrator.
+
+**Origin:** Issue #3, 2026-05-03.

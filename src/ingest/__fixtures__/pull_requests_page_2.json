@@ -1,0 +1,58 @@
+{
+  "repository": {
+    "pullRequests": {
+      "pageInfo": { "hasNextPage": false, "endCursor": null },
+      "nodes": [
+        {
+          "id": "PR_003",
+          "url": "https://github.com/test/repo/pull/3",
+          "number": 3,
+          "title": "Third PR",
+          "body": "Dependency update",
+          "state": "CLOSED",
+          "closedAt": "2026-01-10T00:00:00Z",
+          "mergedAt": null,
+          "mergedBy": null,
+          "createdAt": "2026-01-08T00:00:00Z",
+          "updatedAt": "2026-01-10T00:00:00Z",
+          "author": {
+            "__typename": "Bot",
+            "id": "B_001",
+            "login": "dependabot[bot]",
+            "url": "https://github.com/apps/dependabot"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "LB_002",
+                "name": "dependencies",
+                "color": "0075ca",
+                "description": null
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          },
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "id": "C_PR3_001",
+                  "url": "https://github.com/test/repo/commit/ghi001",
+                  "oid": "ghi001",
+                  "messageHeadline": "chore: update deps",
+                  "messageBody": null,
+                  "committedDate": "2026-01-09T10:00:00Z",
+                  "author": { "user": null }
+                }
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": null }
+          },
+          "closingIssuesReferences": {
+            "nodes": []
+          }
+        }
+      ]
+    }
+  }
+}

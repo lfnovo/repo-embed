@@ -1,0 +1,24 @@
+{
+  "name": "github-embedder-surrealdb",
+  "version": "0.1.0",
+  "description": "Read-only GitHub knowledge-base mirror in SurrealDB.",
+  "private": true,
+  "type": "module",
+  "module": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "smoke:surreal": "bun run src/smoke/surreal.ts",
+    "smoke:ollama": "bun run src/smoke/ollama.ts",
+    "smoke:github": "bun run src/smoke/github.ts",
+    "schema:apply": "bun run src/schema/apply.ts"
+  },
+  "dependencies": {
+    "@octokit/graphql": "^9.0.3",
+    "surrealdb": "^2.0.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "typescript": "^6.0.3"
+  }
+}

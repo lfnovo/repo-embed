@@ -1,0 +1,237 @@
+-- github-embedder-surrealdb — initial schema
+-- Idempotent: safe to re-apply. Adds missing tables/fields; does not destroy data.
+-- If a field type ever needs to change, do it via an explicit migration.
+
+-- =====================================================================
+-- org  — GitHub organizations and user accounts that own repos
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS org SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id ON TABLE org TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url     ON TABLE org TYPE string;
+DEFINE FIELD IF NOT EXISTS login          ON TABLE org TYPE string;
+DEFINE FIELD IF NOT EXISTS name           ON TABLE org TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS kind           ON TABLE org TYPE "User" | "Organization";
+DEFINE FIELD IF NOT EXISTS created_at     ON TABLE org TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE org TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE org TYPE option<datetime>;
+
+DEFINE INDEX IF NOT EXISTS org_node_id_uniq ON TABLE org FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS org_login_uniq   ON TABLE org FIELDS login UNIQUE;
+
+-- =====================================================================
+-- repo — a mirrored GitHub repository
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS repo SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id  ON TABLE repo TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url      ON TABLE repo TYPE string;
+DEFINE FIELD IF NOT EXISTS owner           ON TABLE repo TYPE record<org>;
+DEFINE FIELD IF NOT EXISTS name            ON TABLE repo TYPE string;
+DEFINE FIELD IF NOT EXISTS name_with_owner ON TABLE repo TYPE string;
+DEFINE FIELD IF NOT EXISTS description     ON TABLE repo TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS is_private      ON TABLE repo TYPE bool DEFAULT false;
+-- Registration is the CLI's source of truth: a repo is "mirrored" iff registered_at is set.
+DEFINE FIELD IF NOT EXISTS registered_at   ON TABLE repo TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS last_synced_at  ON TABLE repo TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at      ON TABLE repo TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at      ON TABLE repo TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at      ON TABLE repo TYPE option<datetime>;
+
+DEFINE INDEX IF NOT EXISTS repo_node_id_uniq   ON TABLE repo FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS repo_name_owner_uniq ON TABLE repo FIELDS name_with_owner UNIQUE;
+
+-- =====================================================================
+-- user — a GitHub account (human or bot)
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS user SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id ON TABLE user TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url     ON TABLE user TYPE string;
+DEFINE FIELD IF NOT EXISTS login          ON TABLE user TYPE string;
+DEFINE FIELD IF NOT EXISTS name           ON TABLE user TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS is_bot         ON TABLE user TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS created_at     ON TABLE user TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE user TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE user TYPE option<datetime>;
+
+DEFINE INDEX IF NOT EXISTS user_node_id_uniq ON TABLE user FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS user_login_uniq   ON TABLE user FIELDS login UNIQUE;
+
+-- =====================================================================
+-- label — a label on issues/PRs/discussions (scoped to a repo)
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS label SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id ON TABLE label TYPE string;
+DEFINE FIELD IF NOT EXISTS repo           ON TABLE label TYPE record<repo>;
+DEFINE FIELD IF NOT EXISTS name           ON TABLE label TYPE string;
+DEFINE FIELD IF NOT EXISTS color          ON TABLE label TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS description    ON TABLE label TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at     ON TABLE label TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE label TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE label TYPE option<datetime>;
+
+DEFINE INDEX IF NOT EXISTS label_node_id_uniq ON TABLE label FIELDS github_node_id UNIQUE;
+
+-- =====================================================================
+-- issue
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS issue SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id ON TABLE issue TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url     ON TABLE issue TYPE string;
+DEFINE FIELD IF NOT EXISTS repo           ON TABLE issue TYPE record<repo>;
+DEFINE FIELD IF NOT EXISTS number         ON TABLE issue TYPE int;
+DEFINE FIELD IF NOT EXISTS title          ON TABLE issue TYPE string;
+DEFINE FIELD IF NOT EXISTS body           ON TABLE issue TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS state          ON TABLE issue TYPE "OPEN" | "CLOSED";
+DEFINE FIELD IF NOT EXISTS state_reason   ON TABLE issue TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS author         ON TABLE issue TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS closed_at      ON TABLE issue TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at     ON TABLE issue TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE issue TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE issue TYPE option<datetime>;
+-- Embedding pipeline fields
+DEFINE FIELD IF NOT EXISTS content_hash   ON TABLE issue TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding      ON TABLE issue TYPE option<array<float, 768>>;
+
+DEFINE INDEX IF NOT EXISTS issue_node_id_uniq ON TABLE issue FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS issue_repo_number  ON TABLE issue FIELDS repo, number UNIQUE;
+DEFINE INDEX IF NOT EXISTS issue_embedding_hnsw
+  ON TABLE issue FIELDS embedding HNSW DIMENSION 768 DIST COSINE TYPE F32;
+
+-- =====================================================================
+-- pull_request
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS pull_request SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id ON TABLE pull_request TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url     ON TABLE pull_request TYPE string;
+DEFINE FIELD IF NOT EXISTS repo           ON TABLE pull_request TYPE record<repo>;
+DEFINE FIELD IF NOT EXISTS number         ON TABLE pull_request TYPE int;
+DEFINE FIELD IF NOT EXISTS title          ON TABLE pull_request TYPE string;
+DEFINE FIELD IF NOT EXISTS body           ON TABLE pull_request TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS state          ON TABLE pull_request TYPE "OPEN" | "CLOSED" | "MERGED";
+DEFINE FIELD IF NOT EXISTS author         ON TABLE pull_request TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS merged_at      ON TABLE pull_request TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS closed_at      ON TABLE pull_request TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at     ON TABLE pull_request TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE pull_request TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE pull_request TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS content_hash   ON TABLE pull_request TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding      ON TABLE pull_request TYPE option<array<float, 768>>;
+
+DEFINE INDEX IF NOT EXISTS pr_node_id_uniq ON TABLE pull_request FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS pr_repo_number  ON TABLE pull_request FIELDS repo, number UNIQUE;
+DEFINE INDEX IF NOT EXISTS pr_embedding_hnsw
+  ON TABLE pull_request FIELDS embedding HNSW DIMENSION 768 DIST COSINE TYPE F32;
+
+-- =====================================================================
+-- discussion
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS discussion SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id   ON TABLE discussion TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url       ON TABLE discussion TYPE string;
+DEFINE FIELD IF NOT EXISTS repo             ON TABLE discussion TYPE record<repo>;
+DEFINE FIELD IF NOT EXISTS number           ON TABLE discussion TYPE int;
+DEFINE FIELD IF NOT EXISTS title            ON TABLE discussion TYPE string;
+DEFINE FIELD IF NOT EXISTS body             ON TABLE discussion TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS category         ON TABLE discussion TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS author           ON TABLE discussion TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS answer_chosen_at ON TABLE discussion TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at       ON TABLE discussion TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at       ON TABLE discussion TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at       ON TABLE discussion TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS content_hash     ON TABLE discussion TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding        ON TABLE discussion TYPE option<array<float, 768>>;
+
+DEFINE INDEX IF NOT EXISTS disc_node_id_uniq ON TABLE discussion FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS disc_repo_number  ON TABLE discussion FIELDS repo, number UNIQUE;
+DEFINE INDEX IF NOT EXISTS disc_embedding_hnsw
+  ON TABLE discussion FIELDS embedding HNSW DIMENSION 768 DIST COSINE TYPE F32;
+
+-- =====================================================================
+-- comment — one table, parent via record<> link to exactly one of issue/pr/discussion
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS comment SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id    ON TABLE comment TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url        ON TABLE comment TYPE string;
+DEFINE FIELD IF NOT EXISTS parent_issue      ON TABLE comment TYPE option<record<issue>>;
+DEFINE FIELD IF NOT EXISTS parent_pr         ON TABLE comment TYPE option<record<pull_request>>;
+DEFINE FIELD IF NOT EXISTS parent_discussion ON TABLE comment TYPE option<record<discussion>>;
+DEFINE FIELD IF NOT EXISTS author            ON TABLE comment TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS body              ON TABLE comment TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at        ON TABLE comment TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at        ON TABLE comment TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at        ON TABLE comment TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS content_hash      ON TABLE comment TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding         ON TABLE comment TYPE option<array<float, 768>>;
+
+DEFINE INDEX IF NOT EXISTS comment_node_id_uniq ON TABLE comment FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS comment_embedding_hnsw
+  ON TABLE comment FIELDS embedding HNSW DIMENSION 768 DIST COSINE TYPE F32;
+
+-- =====================================================================
+-- commit — only commits referenced by a PR
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS commit SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS github_node_id   ON TABLE commit TYPE string;
+DEFINE FIELD IF NOT EXISTS github_url       ON TABLE commit TYPE string;
+DEFINE FIELD IF NOT EXISTS repo             ON TABLE commit TYPE record<repo>;
+DEFINE FIELD IF NOT EXISTS oid              ON TABLE commit TYPE string;
+DEFINE FIELD IF NOT EXISTS message_headline ON TABLE commit TYPE string;
+DEFINE FIELD IF NOT EXISTS message_body     ON TABLE commit TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS author           ON TABLE commit TYPE option<record<user>>;
+DEFINE FIELD IF NOT EXISTS committed_date   ON TABLE commit TYPE datetime;
+DEFINE FIELD IF NOT EXISTS created_at       ON TABLE commit TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at       ON TABLE commit TYPE datetime;
+DEFINE FIELD IF NOT EXISTS deleted_at       ON TABLE commit TYPE option<datetime>;
+
+DEFINE INDEX IF NOT EXISTS commit_node_id_uniq ON TABLE commit FIELDS github_node_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS commit_repo_oid     ON TABLE commit FIELDS repo, oid UNIQUE;
+
+-- =====================================================================
+-- Graph relations (edge tables)
+-- Record links above cover containment (repo owns its children, comments
+-- point to parents, author references user). Edges below cover the
+-- cross-cutting relations that may be many-to-many or cross-repo.
+-- =====================================================================
+
+-- has_label: issue | pull_request | discussion  →  label
+DEFINE TABLE IF NOT EXISTS has_label TYPE RELATION
+  FROM issue | pull_request | discussion
+  TO label
+  SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE has_label TYPE datetime;
+
+-- references: issue | pull_request  →  issue | pull_request (incl. cross-repo)
+DEFINE TABLE IF NOT EXISTS references_ref TYPE RELATION
+  FROM issue | pull_request
+  TO issue | pull_request
+  SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE references_ref TYPE datetime;
+
+-- closes: pull_request  →  issue
+DEFINE TABLE IF NOT EXISTS closes TYPE RELATION
+  FROM pull_request
+  TO issue
+  SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE closes TYPE datetime;
+
+-- fixes: pull_request  →  issue
+DEFINE TABLE IF NOT EXISTS fixes TYPE RELATION
+  FROM pull_request
+  TO issue
+  SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE fixes TYPE datetime;
+
+-- contains_commit: pull_request  →  commit
+DEFINE TABLE IF NOT EXISTS contains_commit TYPE RELATION
+  FROM pull_request
+  TO commit
+  SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE contains_commit TYPE datetime;

@@ -1,0 +1,21 @@
+{
+  "repository": {
+    "id": "R_kgDOKxampleAbc",
+    "nameWithOwner": "lfnovo/esperanto",
+    "description": "A multi-provider LLM toolkit for Python",
+    "url": "https://github.com/lfnovo/esperanto",
+    "isPrivate": false,
+    "createdAt": "2023-01-01T00:00:00Z",
+    "updatedAt": "2024-01-01T00:00:00Z",
+    "owner": {
+      "__typename": "User",
+      "id": "U_kgDOKxampleUser",
+      "login": "lfnovo",
+      "url": "https://github.com/lfnovo",
+      "name": "Luis Novo",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/123456",
+      "createdAt": "2020-01-01T00:00:00Z",
+      "updatedAt": "2024-01-01T00:00:00Z"
+    }
+  }
+}

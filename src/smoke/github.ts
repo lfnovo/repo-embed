@@ -1,11 +1,4 @@
-import { graphql } from "@octokit/graphql";
-import { requireGithubToken } from "../config.ts";
-
-const token = requireGithubToken();
-
-const gh = graphql.defaults({
-  headers: { authorization: `token ${token}` },
-});
+import { gh } from "../clients/github.ts";
 
 const query = `
   query($owner: String!, $name: String!) {

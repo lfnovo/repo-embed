@@ -72,6 +72,36 @@ Smoke tests (`bun run smoke:*`) are **manual** — they require live SurrealDB, 
 - **`references` is a reserved word in SurrealQL** — the cross-reference edge table is `references_ref` for that reason. Don't rename it back.
 - **GraphQL author union is mandatory**: every author site must use `... on User { ... } ... on Bot { ... }` so `__typename` is available for `isBot()` (per the bot detection principle).
 - **`embedded_content_hash` vs `content_hash`**: `content_hash` is computed on persist; `embedded_content_hash` is set on embed. The trigger to re-embed is `content_hash != embedded_content_hash`. Don't conflate them.
+- **The `paginate` helper injects a variable named `cursor`.** Every paginated GraphQL query MUST declare `$cursor: String` and use it in the `after:` argument. Variable name mismatch is silent — GraphQL ignores undeclared vars and starts every page from the first.
+
+### SurrealDB v2 + WASM (in-memory mode) gotchas
+
+The in-memory engine used by `withTestDb` is `@surrealdb/wasm`. It diverges from the documented patterns in subtle ways. Check these before assuming an API works:
+
+- **`mem://` requires `namespace` and `database`** in `connect()` opts, even though no auth is needed. Skipping them throws `Specify a namespace to use`.
+- **`engines` belong in the `Surreal` constructor (`DriverOptions`), NOT in `ConnectOptions`.** The right shape is `new Surreal({ engines: { ...createRemoteEngines(), ...createWasmEngines() } })`. Putting engines in `connect()` silently does nothing.
+- **`type::thing(table, id)` is unsupported in WASM.** Use `new StringRecordId("table:id")` from the `surrealdb` package and pass it as a query param. Round-trip: `String(row.id)` → `new StringRecordId(...)` to reuse a record id.
+- **`option<string>` fields reject JS `null`** at the SurrealQL boundary. To set a nullable field to none, inline the literal `NONE` in the query string and conditionally spread the param object — don't bind `null` to a `$param`. Pattern:
+  ```ts
+  const fieldSql = parsed.field !== null ? "$field" : "NONE";
+  await db.query(`UPDATE $id SET field = ${fieldSql}`, {
+    id, ...(parsed.field !== null ? { field: parsed.field } : {})
+  });
+  ```
+  An issue is filed to extract this into a helper once a few more sites use it.
+
+When in doubt about a SurrealDB API shape, read the type definitions directly:
+```bash
+grep -E "^\s*(connect|query|close)" node_modules/surrealdb/dist/surrealdb.d.ts
+```
+
+## Notes for harny prompts
+
+When writing prompts for harny dispatch (or any subagent doing implementation):
+
+- **Code review for try/catch scope**: validators check that error commands exit 1, but they don't catch a `try` that's wrapped too widely. When a prompt asks for try/catch, also instruct: "write a test that throws inside the protected region (e.g., make the inner function throw on purpose) and verify the real error surfaces, not the catch's fallback message."
+- **Verify SDK shapes before asserting them in the prompt.** Past harny runs caught two factual errors in architect prompts about the SurrealDB API. Before specifying "the call signature is X," run `Read node_modules/<pkg>/dist/<pkg>.d.ts` (or grep for the symbol) to confirm.
+- **Don't pre-decompose tasks the planner could merge.** A 2-task split where t2 strictly depends on t1 buys no parallelism and adds two extra phase transitions. Let the planner own the split.
 
 ## Git / PR
 

@@ -16,6 +16,25 @@ export function gh<T>(query: string, params?: RequestParameters): Promise<T> {
   return getGh()<T>(query, params);
 }
 
+/**
+ * Walks a paginated GraphQL connection, yielding nodes one at a time.
+ *
+ * The cursor is injected into `variables` under the key `cursor` —
+ * your query MUST declare `$cursor: String` and reference it via
+ * the connection's `after:` argument. Mismatched variable names are
+ * silent in GraphQL: undeclared vars are ignored and the connection
+ * restarts from the first page on every iteration, producing an
+ * infinite loop.
+ *
+ * Example:
+ * ```graphql
+ * query($owner: String!, $name: String!, $cursor: String) {
+ *   repository(owner: $owner, name: $name) {
+ *     issues(first: 100, after: $cursor) { ... }
+ *   }
+ * }
+ * ```
+ */
 export async function* paginate<T>(
   query: string,
   variables: Record<string, unknown>,

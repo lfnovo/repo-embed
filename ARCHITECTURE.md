@@ -202,6 +202,16 @@ Helpers that paginate over remote APIs (GitHub GraphQL connections, SurrealDB li
 
 **Origin:** Issue #1, 2026-05-03.
 
+### Item-level failures don't fail the batch
+
+In phases that process many independent items (embed pass, batch extractions, future post-processing), a single item's failure is logged and skipped, not propagated. Infrastructure-level failures (the embedder daemon is down, the database is unreachable) DO propagate and crash the run. The split is detected by the first-success heuristic: errors before any successful item in the run are treated as infrastructure; errors after at least one success are treated as per-item.
+
+**Why:** A malformed body or a transient 500 from Ollama shouldn't block 1000 healthy items from being embedded in the same run. Idempotency means a re-run picks up just the failures — but only if the rest of the run succeeded. Conversely, if the embedder is unreachable, every item fails and we want to know immediately, not after watching N retries succeed-zero-times.
+
+**Scope:** All multi-item processing phases (embed pass, future extraction or post-processing passes). Does not apply to orchestration commands like `tool sync` where each stage is a precondition for the next.
+
+**Origin:** Issue #11, 2026-05-03.
+
 ### Ingest stages are pure functions; orchestrators glue them
 
 `fetch*` functions are DB-agnostic and yield parsed values via async generators. `persist*` functions are pure infrastructure: they take a DB handle and a parsed value, and emit no side effects beyond the DB. The CLI command (`tool sync`) is the only place these are composed.

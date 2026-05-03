@@ -26,9 +26,7 @@ export async function* paginate<T>(
 ): AsyncGenerator<T> {
   let cursor: string | null = null;
   while (true) {
-    const params: RequestParameters = cursor
-      ? { ...variables, after: cursor }
-      : { ...variables };
+    const params: RequestParameters = { ...variables, cursor };
     const data = await gh<unknown>(query, params);
     const connection = selectConnection(data);
     for (const node of connection.nodes) {

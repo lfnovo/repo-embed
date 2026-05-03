@@ -7,13 +7,13 @@ if (cmd === undefined || cmd === "--help" || cmd === "-h") {
   const { default: run } = await import("./commands/help.ts");
   run();
 } else {
+  let mod: { default: (args: string[]) => unknown };
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mod = (await import(`./commands/${cmd}.ts`)) as { default: (...args: any[]) => unknown };
-    mod.default(argv.slice(1));
+    mod = (await import(`./commands/${cmd}.ts`)) as typeof mod;
   } catch {
     console.error(`Unknown command: ${cmd}`);
     console.error("Try: tool --help");
     process.exit(1);
   }
+  await mod.default(argv.slice(1));
 }

@@ -44,15 +44,17 @@ Every node carries a `deleted_at: option<datetime>` field. Tombstone instead of 
 
 **Origin:** VISION.md, 2026-05-03.
 
-### Nodes are historical; edges are relational truth
+### Nodes are historical; edges are relational truth — except structural edges
 
-Nodes carry `deleted_at` and are never hard-deleted — they preserve history of what existed and was authored. Edges, by contrast, reflect the current relation between two nodes; when upstream removes the relation (a label unstuck, a "Closes #N" edited away, a referenced commit dropped from a PR), the local edge is hard-deleted outright. No `deleted_at` on edges.
+Nodes carry `deleted_at` and are never hard-deleted — they preserve history of what existed and was authored. Most edges, by contrast, reflect the current relation between two nodes; when upstream removes the relation (a label unstuck, a "Closes #N" edited away, a referenced commit dropped from a PR), the local edge is hard-deleted outright. No `deleted_at` on edges.
 
-**Why:** An edge that no longer exists upstream is not history — it's a stale fact. Filtering by `deleted_at` on every traversal would poison query patterns and grow indexes forever. Edges are cheap to recreate idempotently; the cost of preserving them is higher than the cost of recomputing.
+**Carve-out — structural edges:** Edges that express identity or parentage are an exception. They are created once at first persist and never recomputed or deleted, so traversals to tombstoned nodes still work. Structural edges include: `has` (repo → child), `has_comment` (issue/pr/discussion → comment), `contains_commit` (pr → commit), `authored` (user → anything), `merged_by`-style links. Everything else is relational and follows recompute-on-sync semantics.
 
-**Scope:** All edge tables (`has`, `authored`, `has_label`, `closes`, `fixes`, `references_ref`, `contains_commit`, `in_category`, and any future relation tables). Does not change node soft-delete semantics — nodes still tombstone forever.
+**Why:** A relational edge that no longer exists upstream is not history — it's a stale fact. Filtering by `deleted_at` on every traversal would poison query patterns and grow indexes forever. Structural edges, however, encode "this comment was born on this issue" — that fact doesn't change when the comment is later tombstoned. Without the structural carve-out, traversal from an issue to its deleted comments would silently break.
 
-**Origin:** Issue #6, 2026-05-03.
+**Scope:** All edge tables. Relational: `has_label`, `closes`, `fixes`, `references_ref`, `in_category`, future cross-references. Structural: `has`, `has_comment`, `contains_commit`, `authored`, parent-pointer edges. Does not change node soft-delete semantics — nodes still tombstone forever.
+
+**Origin:** Issue #6, 2026-05-03. Structural carve-out added in #7, 2026-05-03.
 
 ### Embedding dimension is a hard schema decision
 

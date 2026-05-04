@@ -226,7 +226,7 @@ export default async function run(args: string[]): Promise<void> {
             subkind: parentKind,
             repo: nwo,
             number: parent.number,
-            title: `(comment on) ${parent.title}`,
+            title: parent.title,
             url: comment.github_url,
             score: comment.score,
           });
@@ -277,7 +277,8 @@ export default async function run(args: string[]): Promise<void> {
       } else {
         kindLabel = r.kind;
       }
-      console.log(`${i + 1}. [${kindLabel}] ${r.title} (${r.repo}) — score: ${r.score.toFixed(4)}`);
+      const titlePrefix = r.kind === "comment" ? "(comment on) " : "";
+      console.log(`${i + 1}. [${kindLabel}] ${titlePrefix}${r.title} (${r.repo}) — score: ${r.score.toFixed(4)}`);
       console.log(`   ${r.url}`);
       if (i < results.length - 1) console.log("");
     }

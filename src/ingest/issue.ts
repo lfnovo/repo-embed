@@ -6,6 +6,7 @@ import { paginate, gh } from "../clients/github.ts";
 import { isBot } from "./bot.ts";
 import { upsertUser } from "./user.ts";
 import { upsertLabelsAndEdges } from "./labels.ts";
+import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import type { ParsedUser, ParsedLabel, RepoRef } from "./types.ts";
 
 export type ParsedIssue = {
@@ -196,10 +197,6 @@ export async function persistIssue(
     authorRef = new StringRecordId(id);
   }
 
-  const authorSql = parsed.author !== null ? "$author" : "NONE";
-  const stateReasonSql = parsed.state_reason !== null ? "$state_reason" : "NONE";
-  const closedAtSql = parsed.closed_at !== null ? "$closed_at" : "NONE";
-
   const [existing] = await db.query<[Array<{ id: unknown }>]>(
     "SELECT id FROM issue WHERE github_node_id = $github_node_id",
     { github_node_id: parsed.github_node_id },
@@ -208,66 +205,44 @@ export async function persistIssue(
   let issueRecordId: string;
 
   if (existing.length === 0) {
+    const content = createContent({
+      github_node_id: parsed.github_node_id,
+      github_url: parsed.github_url,
+      repo: repoRef,
+      number: parsed.number,
+      title: parsed.title,
+      body: parsed.body,
+      state: parsed.state,
+      state_reason: parsed.state_reason,
+      author: authorRef ?? null,
+      closed_at: parsed.closed_at,
+      created_at: parsed.created_at,
+      updated_at: parsed.updated_at,
+      deleted_at: null,
+      content_hash: parsed.content_hash,
+      embedding: null,
+    });
     const [created] = await db.query<[Array<{ id: unknown }>]>(
-      `CREATE issue CONTENT {
-        github_node_id: $github_node_id,
-        github_url: $github_url,
-        repo: $repo,
-        number: $number,
-        title: $title,
-        body: $body,
-        state: $state,
-        state_reason: ${stateReasonSql},
-        author: ${authorSql},
-        closed_at: ${closedAtSql},
-        created_at: $created_at,
-        updated_at: $updated_at,
-        deleted_at: NONE,
-        content_hash: $content_hash,
-        embedding: NONE
-      }`,
-      {
-        github_node_id: parsed.github_node_id,
-        github_url: parsed.github_url,
-        repo: repoRef,
-        number: parsed.number,
-        title: parsed.title,
-        body: parsed.body,
-        state: parsed.state,
-        ...(parsed.state_reason !== null ? { state_reason: parsed.state_reason } : {}),
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        ...(parsed.closed_at !== null ? { closed_at: parsed.closed_at } : {}),
-        created_at: parsed.created_at,
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `CREATE issue CONTENT ${content.sql}`,
+      content.params,
     );
     issueRecordId = String(created[0].id);
   } else {
     issueRecordId = String(existing[0].id);
+    const set = updateSet({
+      github_url: parsed.github_url,
+      title: parsed.title,
+      body: parsed.body,
+      state: parsed.state,
+      state_reason: parsed.state_reason,
+      author: authorRef ?? null,
+      closed_at: parsed.closed_at,
+      updated_at: parsed.updated_at,
+      content_hash: parsed.content_hash,
+    });
     await db.query(
-      `UPDATE $id SET
-        github_url = $github_url,
-        title = $title,
-        body = $body,
-        state = $state,
-        state_reason = ${stateReasonSql},
-        author = ${authorSql},
-        closed_at = ${closedAtSql},
-        updated_at = $updated_at,
-        content_hash = $content_hash`,
-      {
-        id: new StringRecordId(issueRecordId),
-        github_url: parsed.github_url,
-        title: parsed.title,
-        body: parsed.body,
-        state: parsed.state,
-        ...(parsed.state_reason !== null ? { state_reason: parsed.state_reason } : {}),
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        ...(parsed.closed_at !== null ? { closed_at: parsed.closed_at } : {}),
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `UPDATE $id ${set.sql}`,
+      { id: new StringRecordId(issueRecordId), ...set.params },
     );
   }
 

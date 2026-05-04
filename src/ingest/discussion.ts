@@ -6,6 +6,7 @@ import { paginate, gh } from "../clients/github.ts";
 import { isBot } from "./bot.ts";
 import { upsertUser } from "./user.ts";
 import { upsertLabelsAndEdges } from "./labels.ts";
+import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import type { ParsedUser, ParsedLabel, RepoRef } from "./types.ts";
 
 export type ParsedDiscussion = {
@@ -223,10 +224,6 @@ export async function persistDiscussion(
     authorRef = new StringRecordId(id);
   }
 
-  const authorSql = parsed.author !== null ? "$author" : "NONE";
-  const answerChosenAtSql = parsed.answer_chosen_at !== null ? "$answer_chosen_at" : "NONE";
-  const categorySql = parsed.category_name !== null ? "$category" : "NONE";
-
   const [existing] = await db.query<[Array<{ id: unknown }>]>(
     "SELECT id FROM discussion WHERE github_node_id = $github_node_id",
     { github_node_id: parsed.github_node_id },
@@ -235,62 +232,42 @@ export async function persistDiscussion(
   let discussionRecordId: string;
 
   if (existing.length === 0) {
+    const content = createContent({
+      github_node_id: parsed.github_node_id,
+      github_url: parsed.github_url,
+      repo: repoRef,
+      number: parsed.number,
+      title: parsed.title,
+      body: parsed.body,
+      category: parsed.category_name,
+      author: authorRef ?? null,
+      answer_chosen_at: parsed.answer_chosen_at,
+      created_at: parsed.created_at,
+      updated_at: parsed.updated_at,
+      deleted_at: null,
+      content_hash: parsed.content_hash,
+      embedding: null,
+    });
     const [created] = await db.query<[Array<{ id: unknown }>]>(
-      `CREATE discussion CONTENT {
-        github_node_id: $github_node_id,
-        github_url: $github_url,
-        repo: $repo,
-        number: $number,
-        title: $title,
-        body: $body,
-        category: ${categorySql},
-        author: ${authorSql},
-        answer_chosen_at: ${answerChosenAtSql},
-        created_at: $created_at,
-        updated_at: $updated_at,
-        deleted_at: NONE,
-        content_hash: $content_hash,
-        embedding: NONE
-      }`,
-      {
-        github_node_id: parsed.github_node_id,
-        github_url: parsed.github_url,
-        repo: repoRef,
-        number: parsed.number,
-        title: parsed.title,
-        body: parsed.body,
-        ...(parsed.category_name !== null ? { category: parsed.category_name } : {}),
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        ...(parsed.answer_chosen_at !== null ? { answer_chosen_at: parsed.answer_chosen_at } : {}),
-        created_at: parsed.created_at,
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `CREATE discussion CONTENT ${content.sql}`,
+      content.params,
     );
     discussionRecordId = String(created[0].id);
   } else {
     discussionRecordId = String(existing[0].id);
+    const set = updateSet({
+      github_url: parsed.github_url,
+      title: parsed.title,
+      body: parsed.body,
+      category: parsed.category_name,
+      author: authorRef ?? null,
+      answer_chosen_at: parsed.answer_chosen_at,
+      updated_at: parsed.updated_at,
+      content_hash: parsed.content_hash,
+    });
     await db.query(
-      `UPDATE $id SET
-        github_url = $github_url,
-        title = $title,
-        body = $body,
-        category = ${categorySql},
-        author = ${authorSql},
-        answer_chosen_at = ${answerChosenAtSql},
-        updated_at = $updated_at,
-        content_hash = $content_hash`,
-      {
-        id: new StringRecordId(discussionRecordId),
-        github_url: parsed.github_url,
-        title: parsed.title,
-        body: parsed.body,
-        ...(parsed.category_name !== null ? { category: parsed.category_name } : {}),
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        ...(parsed.answer_chosen_at !== null ? { answer_chosen_at: parsed.answer_chosen_at } : {}),
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `UPDATE $id ${set.sql}`,
+      { id: new StringRecordId(discussionRecordId), ...set.params },
     );
   }
 

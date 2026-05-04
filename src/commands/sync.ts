@@ -1,6 +1,7 @@
 import { gh } from "../clients/github.ts";
 import { withDb } from "../clients/surreal.ts";
 import { StringRecordId } from "surrealdb";
+import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import { fetchLabelsCatalog, persistLabelCatalog } from "../ingest/labels.ts";
 import { fetchIssues, persistIssue } from "../ingest/issue.ts";
 import { fetchPullRequests, persistPullRequest } from "../ingest/pull_request.ts";
@@ -117,45 +118,33 @@ export default async function run(args: string[]): Promise<void> {
 
     let orgId: unknown;
     if (existingOrgs.length === 0) {
+      const orgContent = createContent({
+        github_node_id: ownerData.id,
+        github_url: ownerData.url,
+        login: ownerData.login,
+        name: ownerData.name,
+        kind: ownerData.__typename,
+        created_at: new Date(ownerData.createdAt),
+        updated_at: new Date(ownerData.updatedAt),
+        deleted_at: null,
+      });
       const [created] = await db.query<[Array<{ id: unknown }>]>(
-        `CREATE org CONTENT {
-          github_node_id: $github_node_id,
-          github_url: $github_url,
-          login: $login,
-          name: $name,
-          kind: $kind,
-          created_at: $created_at,
-          updated_at: $updated_at,
-          deleted_at: NONE
-        }`,
-        {
-          github_node_id: ownerData.id,
-          github_url: ownerData.url,
-          login: ownerData.login,
-          name: ownerData.name,
-          kind: ownerData.__typename,
-          created_at: new Date(ownerData.createdAt),
-          updated_at: new Date(ownerData.updatedAt),
-        },
+        `CREATE org CONTENT ${orgContent.sql}`,
+        orgContent.params,
       );
       orgId = created[0].id;
     } else {
       orgId = existingOrgs[0].id;
+      const orgSet = updateSet({
+        github_url: ownerData.url,
+        login: ownerData.login,
+        name: ownerData.name,
+        kind: ownerData.__typename,
+        updated_at: new Date(ownerData.updatedAt),
+      });
       await db.query(
-        `UPDATE $id SET
-          github_url = $github_url,
-          login = $login,
-          name = $name,
-          kind = $kind,
-          updated_at = $updated_at`,
-        {
-          id: orgId,
-          github_url: ownerData.url,
-          login: ownerData.login,
-          name: ownerData.name,
-          kind: ownerData.__typename,
-          updated_at: new Date(ownerData.updatedAt),
-        },
+        `UPDATE $id ${orgSet.sql}`,
+        { id: orgId, ...orgSet.params },
       );
     }
 
@@ -164,58 +153,36 @@ export default async function run(args: string[]): Promise<void> {
       { github_node_id: repository.id },
     );
 
-    const descSql = repository.description !== null ? "$description" : "NONE";
-    const descParam =
-      repository.description !== null ? { description: repository.description } : {};
-
     if (existingRepos.length === 0) {
+      const repoContent = createContent({
+        github_node_id: repository.id,
+        github_url: repository.url,
+        name,
+        name_with_owner: repository.nameWithOwner,
+        description: repository.description,
+        is_private: repository.isPrivate,
+        owner: orgId as object,
+        created_at: new Date(repository.createdAt),
+        updated_at: new Date(repository.updatedAt),
+      });
       await db.query(
-        `CREATE repo CONTENT {
-          github_node_id: $github_node_id,
-          github_url: $github_url,
-          name: $name,
-          name_with_owner: $name_with_owner,
-          description: ${descSql},
-          is_private: $is_private,
-          owner: $owner,
-          created_at: $created_at,
-          updated_at: $updated_at,
-          registered_at: time::now()
-        }`,
-        {
-          github_node_id: repository.id,
-          github_url: repository.url,
-          name,
-          name_with_owner: repository.nameWithOwner,
-          is_private: repository.isPrivate,
-          owner: orgId,
-          created_at: new Date(repository.createdAt),
-          updated_at: new Date(repository.updatedAt),
-          ...descParam,
-        },
+        `CREATE repo CONTENT ${repoContent.sql.slice(0, -2)}, registered_at: time::now() }`,
+        repoContent.params,
       );
     } else {
+      const repoSet = updateSet({
+        github_url: repository.url,
+        name,
+        name_with_owner: repository.nameWithOwner,
+        description: repository.description,
+        is_private: repository.isPrivate,
+        owner: orgId as object,
+        created_at: new Date(repository.createdAt),
+        updated_at: new Date(repository.updatedAt),
+      });
       await db.query(
-        `UPDATE $id SET
-          github_url = $github_url,
-          name = $name,
-          name_with_owner = $name_with_owner,
-          description = ${descSql},
-          is_private = $is_private,
-          owner = $owner,
-          created_at = $created_at,
-          updated_at = $updated_at`,
-        {
-          id: existingRepos[0].id,
-          github_url: repository.url,
-          name,
-          name_with_owner: repository.nameWithOwner,
-          is_private: repository.isPrivate,
-          owner: orgId,
-          created_at: new Date(repository.createdAt),
-          updated_at: new Date(repository.updatedAt),
-          ...descParam,
-        },
+        `UPDATE $id ${repoSet.sql}`,
+        { id: existingRepos[0].id, ...repoSet.params },
       );
     }
 

@@ -7,6 +7,7 @@ import { computeContentHash } from "./issue.ts";
 import { upsertUser } from "./user.ts";
 import { upsertLabelsAndEdges } from "./labels.ts";
 import { linkClosingIssues } from "./crossrefs.ts";
+import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import type { ParsedUser, ParsedLabel, RepoRef } from "./types.ts";
 
 export type ParsedCommit = {
@@ -293,9 +294,6 @@ export async function persistPullRequest(
     const id = await upsertUser(db, parsed.author);
     authorRef = new StringRecordId(id);
   }
-  const authorSql = parsed.author !== null ? "$author" : "NONE";
-  const mergedAtSql = parsed.merged_at !== null ? "$merged_at" : "NONE";
-  const closedAtSql = parsed.closed_at !== null ? "$closed_at" : "NONE";
 
   // 2. Lookup PR by github_node_id; CREATE or UPDATE
   const [existing] = await db.query<[Array<{ id: unknown }>]>(
@@ -306,66 +304,44 @@ export async function persistPullRequest(
   let prRecordId: string;
 
   if (existing.length === 0) {
+    const content = createContent({
+      github_node_id: parsed.github_node_id,
+      github_url: parsed.github_url,
+      repo: repoRef,
+      number: parsed.number,
+      title: parsed.title,
+      body: parsed.body,
+      state: parsed.state,
+      author: authorRef ?? null,
+      merged_at: parsed.merged_at,
+      closed_at: parsed.closed_at,
+      created_at: parsed.created_at,
+      updated_at: parsed.updated_at,
+      deleted_at: null,
+      content_hash: parsed.content_hash,
+      embedding: null,
+    });
     const [created] = await db.query<[Array<{ id: unknown }>]>(
-      `CREATE pull_request CONTENT {
-        github_node_id: $github_node_id,
-        github_url: $github_url,
-        repo: $repo,
-        number: $number,
-        title: $title,
-        body: $body,
-        state: $state,
-        author: ${authorSql},
-        merged_at: ${mergedAtSql},
-        closed_at: ${closedAtSql},
-        created_at: $created_at,
-        updated_at: $updated_at,
-        deleted_at: NONE,
-        content_hash: $content_hash,
-        embedding: NONE
-      }`,
-      {
-        github_node_id: parsed.github_node_id,
-        github_url: parsed.github_url,
-        repo: repoRef,
-        number: parsed.number,
-        title: parsed.title,
-        body: parsed.body,
-        state: parsed.state,
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        ...(parsed.merged_at !== null ? { merged_at: parsed.merged_at } : {}),
-        ...(parsed.closed_at !== null ? { closed_at: parsed.closed_at } : {}),
-        created_at: parsed.created_at,
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `CREATE pull_request CONTENT ${content.sql}`,
+      content.params,
     );
     prRecordId = String(created[0].id);
   } else {
     prRecordId = String(existing[0].id);
+    const set = updateSet({
+      github_url: parsed.github_url,
+      title: parsed.title,
+      body: parsed.body,
+      state: parsed.state,
+      author: authorRef ?? null,
+      merged_at: parsed.merged_at,
+      closed_at: parsed.closed_at,
+      updated_at: parsed.updated_at,
+      content_hash: parsed.content_hash,
+    });
     await db.query(
-      `UPDATE $id SET
-        github_url = $github_url,
-        title = $title,
-        body = $body,
-        state = $state,
-        author = ${authorSql},
-        merged_at = ${mergedAtSql},
-        closed_at = ${closedAtSql},
-        updated_at = $updated_at,
-        content_hash = $content_hash`,
-      {
-        id: new StringRecordId(prRecordId),
-        github_url: parsed.github_url,
-        title: parsed.title,
-        body: parsed.body,
-        state: parsed.state,
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        ...(parsed.merged_at !== null ? { merged_at: parsed.merged_at } : {}),
-        ...(parsed.closed_at !== null ? { closed_at: parsed.closed_at } : {}),
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `UPDATE $id ${set.sql}`,
+      { id: new StringRecordId(prRecordId), ...set.params },
     );
   }
 
@@ -378,8 +354,6 @@ export async function persistPullRequest(
       const commitUserId = await upsertUser(db, commit.author);
       commitAuthorRef = new StringRecordId(commitUserId);
     }
-    const commitAuthorSql = commit.author !== null ? "$commit_author" : "NONE";
-    const messageBodySql = commit.message_body !== null ? "$message_body" : "NONE";
 
     const [existingCommit] = await db.query<[Array<{ id: unknown }>]>(
       "SELECT id FROM commit WHERE github_node_id = $github_node_id",
@@ -389,50 +363,34 @@ export async function persistPullRequest(
     let commitRecordId: string;
 
     if (existingCommit.length === 0) {
+      const commitContent = createContent({
+        github_node_id: commit.github_node_id,
+        github_url: commit.github_url,
+        repo: repoRef,
+        oid: commit.oid,
+        message_headline: commit.message_headline,
+        message_body: commit.message_body,
+        author: commitAuthorRef ?? null,
+        committed_date: commit.committed_date,
+        deleted_at: null,
+      });
       const [createdCommit] = await db.query<[Array<{ id: unknown }>]>(
-        `CREATE commit CONTENT {
-          github_node_id: $github_node_id,
-          github_url: $github_url,
-          repo: $repo,
-          oid: $oid,
-          message_headline: $message_headline,
-          message_body: ${messageBodySql},
-          author: ${commitAuthorSql},
-          committed_date: $committed_date,
-          created_at: time::now(),
-          updated_at: time::now(),
-          deleted_at: NONE
-        }`,
-        {
-          github_node_id: commit.github_node_id,
-          github_url: commit.github_url,
-          repo: repoRef,
-          oid: commit.oid,
-          message_headline: commit.message_headline,
-          ...(commit.message_body !== null ? { message_body: commit.message_body } : {}),
-          ...(commit.author !== null ? { commit_author: commitAuthorRef } : {}),
-          committed_date: commit.committed_date,
-        },
+        `CREATE commit CONTENT ${commitContent.sql.slice(0, -2)}, created_at: time::now(), updated_at: time::now() }`,
+        commitContent.params,
       );
       commitRecordId = String(createdCommit[0].id);
     } else {
       commitRecordId = String(existingCommit[0].id);
+      const commitSet = updateSet({
+        github_url: commit.github_url,
+        message_headline: commit.message_headline,
+        message_body: commit.message_body,
+        author: commitAuthorRef ?? null,
+        committed_date: commit.committed_date,
+      });
       await db.query(
-        `UPDATE $id SET
-          github_url = $github_url,
-          message_headline = $message_headline,
-          message_body = ${messageBodySql},
-          author = ${commitAuthorSql},
-          committed_date = $committed_date,
-          updated_at = time::now()`,
-        {
-          id: new StringRecordId(commitRecordId),
-          github_url: commit.github_url,
-          message_headline: commit.message_headline,
-          ...(commit.message_body !== null ? { message_body: commit.message_body } : {}),
-          ...(commit.author !== null ? { commit_author: commitAuthorRef } : {}),
-          committed_date: commit.committed_date,
-        },
+        `UPDATE $id ${commitSet.sql}, updated_at = time::now()`,
+        { id: new StringRecordId(commitRecordId), ...commitSet.params },
       );
     }
 

@@ -93,8 +93,9 @@ DEFINE FIELD IF NOT EXISTS created_at     ON TABLE issue TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE issue TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE issue TYPE option<datetime>;
 -- Embedding pipeline fields
-DEFINE FIELD IF NOT EXISTS content_hash   ON TABLE issue TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS embedding      ON TABLE issue TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS content_hash          ON TABLE issue TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding             ON TABLE issue TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS embedded_content_hash ON TABLE issue TYPE option<string>;
 
 DEFINE INDEX IF NOT EXISTS issue_node_id_uniq ON TABLE issue FIELDS github_node_id UNIQUE;
 DEFINE INDEX IF NOT EXISTS issue_repo_number  ON TABLE issue FIELDS repo, number UNIQUE;
@@ -119,8 +120,9 @@ DEFINE FIELD IF NOT EXISTS closed_at      ON TABLE pull_request TYPE option<date
 DEFINE FIELD IF NOT EXISTS created_at     ON TABLE pull_request TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE pull_request TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE pull_request TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS content_hash   ON TABLE pull_request TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS embedding      ON TABLE pull_request TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS content_hash          ON TABLE pull_request TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding             ON TABLE pull_request TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS embedded_content_hash ON TABLE pull_request TYPE option<string>;
 
 DEFINE INDEX IF NOT EXISTS pr_node_id_uniq ON TABLE pull_request FIELDS github_node_id UNIQUE;
 DEFINE INDEX IF NOT EXISTS pr_repo_number  ON TABLE pull_request FIELDS repo, number UNIQUE;
@@ -144,8 +146,9 @@ DEFINE FIELD IF NOT EXISTS answer_chosen_at ON TABLE discussion TYPE option<date
 DEFINE FIELD IF NOT EXISTS created_at       ON TABLE discussion TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at       ON TABLE discussion TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at       ON TABLE discussion TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS content_hash     ON TABLE discussion TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS embedding        ON TABLE discussion TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS content_hash          ON TABLE discussion TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding             ON TABLE discussion TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS embedded_content_hash ON TABLE discussion TYPE option<string>;
 
 DEFINE INDEX IF NOT EXISTS disc_node_id_uniq ON TABLE discussion FIELDS github_node_id UNIQUE;
 DEFINE INDEX IF NOT EXISTS disc_repo_number  ON TABLE discussion FIELDS repo, number UNIQUE;
@@ -168,8 +171,9 @@ DEFINE FIELD IF NOT EXISTS body              ON TABLE comment TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at        ON TABLE comment TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at        ON TABLE comment TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at        ON TABLE comment TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS content_hash      ON TABLE comment TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS embedding         ON TABLE comment TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS content_hash          ON TABLE comment TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS embedding             ON TABLE comment TYPE option<array<float, 768>>;
+DEFINE FIELD IF NOT EXISTS embedded_content_hash ON TABLE comment TYPE option<string>;
 
 DEFINE INDEX IF NOT EXISTS comment_node_id_uniq ON TABLE comment FIELDS github_node_id UNIQUE;
 DEFINE INDEX IF NOT EXISTS comment_embedding_hnsw

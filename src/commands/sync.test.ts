@@ -199,7 +199,12 @@ describe("sync command — happy path", () => {
         { owner: orgId },
       );
 
-      await run(["lfnovo/test-repo"]);
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(["lfnovo/test-repo"]); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l === 'Sync mode: full')).toBe(true);
 
       const [[repoRow]] = await db.query<[[{ last_synced_at: unknown }]]>(
         "SELECT last_synced_at FROM repo WHERE name_with_owner = $nwo",

@@ -49,12 +49,12 @@ export async function embedWithFallback(text: string): Promise<number[]> {
       return result[0];
     } catch (err) {
       if (!isContextLengthError(err)) throw err;
-      len = Math.floor(len / 2);
-      if (len < MIN_FALLBACK_CHARS) {
+      if (len <= MIN_FALLBACK_CHARS) {
         throw new Error(
           "could not embed at any length: text exceeds context even at minimum",
         );
       }
+      len = Math.max(MIN_FALLBACK_CHARS, Math.floor(len / 2));
     }
   }
 }

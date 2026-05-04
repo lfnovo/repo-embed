@@ -97,4 +97,19 @@ describe("embedWithFallback", () => {
     const expectedCalls = Math.ceil(Math.log2(initialLen / 256)) + 1;
     expect(callCount).toBe(expectedCalls);
   });
+
+  it("retries at MIN_FALLBACK_CHARS when halving would skip past it", async () => {
+    let callCount = 0;
+    mockFetch(async () => {
+      callCount++;
+      return makeErrorResponse("input length exceeds the context length");
+    });
+    // 500 chars: halving gives 250 (< 256), but the fallback should clamp to
+    // 256 and try once more before giving up.
+    const text = "a".repeat(500);
+    await expect(embedWithFallback(text)).rejects.toThrow(
+      "could not embed at any length",
+    );
+    expect(callCount).toBe(2);
+  });
 });

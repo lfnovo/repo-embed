@@ -1,0 +1,33 @@
+{
+  "repository": {
+    "issue": {
+      "id": "I_TEST_001",
+      "comments": {
+        "pageInfo": { "hasNextPage": false, "endCursor": null },
+        "nodes": [
+          {
+            "id": "IC_001",
+            "url": "https://github.com/test/repo/issues/1#issuecomment-1",
+            "body": "First issue comment\r\nwith CRLF",
+            "createdAt": "2026-01-01T10:00:00Z",
+            "updatedAt": "2026-01-01T10:00:00Z",
+            "author": {
+              "__typename": "User",
+              "id": "U_001",
+              "login": "testuser",
+              "url": "https://github.com/testuser"
+            }
+          },
+          {
+            "id": "IC_002",
+            "url": "https://github.com/test/repo/issues/1#issuecomment-2",
+            "body": null,
+            "createdAt": "2026-01-02T10:00:00Z",
+            "updatedAt": "2026-01-02T10:00:00Z",
+            "author": null
+          }
+        ]
+      }
+    }
+  }
+}

@@ -30,16 +30,19 @@ function mockFetch(fn: (...args: any[]) => Promise<Response>): void {
   global.fetch = fn as typeof fetch;
 }
 
-describe("embedWithFallback — success on first try", () => {
-  it("returns the embedding vector directly", async () => {
-    mockFetch(async () => makeOkResponse([MOCK_VECTOR]));
+describe("embedWithFallback", () => {
+  it("returns embedding on first call with no retries (1 fetch call)", async () => {
+    let callCount = 0;
+    mockFetch(async () => {
+      callCount++;
+      return makeOkResponse([MOCK_VECTOR]);
+    });
     const result = await embedWithFallback("hello world");
     expect(result).toEqual(MOCK_VECTOR);
+    expect(callCount).toBe(1);
   });
-});
 
-describe("embedWithFallback — context-length error triggers halving", () => {
-  it("retries with half the text after context-length error and returns embedding", async () => {
+  it("halves text once on context-length error then succeeds (2 fetch calls)", async () => {
     let callCount = 0;
     mockFetch(async () => {
       callCount++;
@@ -47,38 +50,13 @@ describe("embedWithFallback — context-length error triggers halving", () => {
         return makeErrorResponse("input length exceeds the context length");
       return makeOkResponse([MOCK_VECTOR]);
     });
-    const text = "a".repeat(600);
+    const text = "a".repeat(8000);
     const result = await embedWithFallback(text);
     expect(result).toEqual(MOCK_VECTOR);
     expect(callCount).toBe(2);
   });
 
-  it("throws minimum-length error when len drops below 256", async () => {
-    mockFetch(async () =>
-      makeErrorResponse("input length exceeds the context length"),
-    );
-    const text = "a".repeat(600);
-    await expect(embedWithFallback(text)).rejects.toThrow(
-      "could not embed at any length: text exceeds context even at minimum",
-    );
-  });
-});
-
-describe("embedWithFallback — non-context errors propagate immediately", () => {
-  it("rethrows connection-refused error without retrying", async () => {
-    let callCount = 0;
-    mockFetch(async () => {
-      callCount++;
-      return makeErrorResponse("connection refused", 503);
-    });
-    const text = "a".repeat(600);
-    await expect(embedWithFallback(text)).rejects.toThrow("HTTP 503");
-    expect(callCount).toBe(1);
-  });
-});
-
-describe("isContextLengthError — verified through embedWithFallback behavior", () => {
-  it("treats 'input length exceeds the context length' as a context-length error (retries)", async () => {
+  it("halves text multiple times until success (3 fetch calls)", async () => {
     let callCount = 0;
     mockFetch(async () => {
       callCount++;
@@ -86,18 +64,37 @@ describe("isContextLengthError — verified through embedWithFallback behavior",
         return makeErrorResponse("input length exceeds the context length");
       return makeOkResponse([MOCK_VECTOR]);
     });
-    const text = "a".repeat(1200);
-    await embedWithFallback(text);
-    expect(callCount).toBeGreaterThan(1);
+    const text = "a".repeat(8000);
+    const result = await embedWithFallback(text);
+    expect(result).toEqual(MOCK_VECTOR);
+    expect(callCount).toBe(3);
   });
 
-  it("treats 'connection refused' as a non-context error (no retry)", async () => {
+  it("propagates non-context error immediately without retrying (1 fetch call)", async () => {
     let callCount = 0;
     mockFetch(async () => {
       callCount++;
-      return makeErrorResponse("connection refused", 503);
+      return makeErrorResponse("internal error", 500);
     });
-    await expect(embedWithFallback("a".repeat(600))).rejects.toThrow();
+    const text = "a".repeat(8000);
+    await expect(embedWithFallback(text)).rejects.toThrow("HTTP 500");
     expect(callCount).toBe(1);
+  });
+
+  it("throws 'could not embed at any length' after exhausting MIN_FALLBACK_CHARS", async () => {
+    let callCount = 0;
+    mockFetch(async () => {
+      callCount++;
+      return makeErrorResponse("input length exceeds the context length");
+    });
+    // Use a power of 2 so Math.floor halving is exact and the formula holds
+    const initialLen = 1024;
+    const text = "a".repeat(initialLen);
+    await expect(embedWithFallback(text)).rejects.toThrow(
+      "could not embed at any length",
+    );
+    // Each retry halves len; throws after floor(len/2) < 256
+    const expectedCalls = Math.ceil(Math.log2(initialLen / 256)) + 1;
+    expect(callCount).toBe(expectedCalls);
   });
 });

@@ -88,7 +88,11 @@ The in-memory engine used by `withTestDb` is `@surrealdb/wasm`. It diverges from
     id, ...(parsed.field !== null ? { field: parsed.field } : {})
   });
   ```
-  An issue is filed to extract this into a helper once a few more sites use it.
+  Issue #22 will extract this into a helper once enough sites have accumulated.
+- **`field IN $array` returns 0 silently when the array contains `StringRecordId` values.** No error, just an empty result set — easy to mistake for "no matches." Use `$array CONTAINS field` instead. This bit production once (issue #39 / PR #41); unit tests with in-memory SurrealDB had different semantics and didn't catch it.
+- **`DEFINE TABLE ... OVERWRITE` for `TYPE RELATION` is not supported by `@surrealdb/wasm`.** Edge tables can only be defined with `IF NOT EXISTS`; widening their `FROM`/`TO` after creation is not possible without dropping. If you need wider FROM/TO mid-project, document the limitation inline and skip the wider scope (see `references_ref` in `schemas.surrealql`).
+- **JS client returns `undefined` (not `null`) for NONE fields on read.** Tests should use loose `== null` (catches both) rather than `=== null`, especially when comparing query result rows.
+- **`ORDER BY` on a non-indexed field may be rejected** by `@surrealdb/wasm`. If sorting matters and the field isn't indexed, sort in JS after the query, or add an index.
 
 When in doubt about a SurrealDB API shape, read the type definitions directly:
 ```bash
@@ -100,8 +104,10 @@ grep -E "^\s*(connect|query|close)" node_modules/surrealdb/dist/surrealdb.d.ts
 When writing prompts for harny dispatch (or any subagent doing implementation):
 
 - **Code review for try/catch scope**: validators check that error commands exit 1, but they don't catch a `try` that's wrapped too widely. When a prompt asks for try/catch, also instruct: "write a test that throws inside the protected region (e.g., make the inner function throw on purpose) and verify the real error surfaces, not the catch's fallback message."
-- **Verify SDK shapes before asserting them in the prompt.** Past harny runs caught two factual errors in architect prompts about the SurrealDB API. Before specifying "the call signature is X," run `Read node_modules/<pkg>/dist/<pkg>.d.ts` (or grep for the symbol) to confirm.
+- **Verify SDK shapes before asserting them in the prompt.** Past harny runs caught factual errors in architect prompts about SurrealDB and Ollama APIs. Before specifying "the call signature is X," run `Read node_modules/<pkg>/dist/<pkg>.d.ts` (or grep for the symbol) to confirm.
 - **Don't pre-decompose tasks the planner could merge.** A 2-task split where t2 strictly depends on t1 buys no parallelism and adds two extra phase transitions. Let the planner own the split.
+- **Mock-vs-real engine fidelity:** unit tests use in-memory `@surrealdb/wasm` and mocked Ollama; both diverge from production engines in ways that have already cost two production bugs (issue #11 context-window, issue #39 IN-with-records). When a prompt covers a SurrealDB query that uses an array of records, an unusual operator (`<|N,COSINE|>`, `IN`, `INSIDE`), or any embedding call with realistic input length, **require an explicit live-engine probe**: "After tests pass, the dev must run the new query against a live SurrealDB v2 with seeded data and verify expected cardinality, OR run the new embed call against a real Ollama with the longest realistic input from the corpus." Document the probe result in the PR body.
+- **Validators must re-execute spec-claimed verifications.** If a prompt asks the dev to "grep across `src/ingest/` to verify X," the validator must independently re-run the grep and check the result. Trusting the planner's "I confirmed in pre-planning read" leaves a hole — the verification can drop through three layers without anyone actually doing it (issue #9 example).
 
 ## Git / PR
 

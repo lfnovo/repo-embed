@@ -90,26 +90,40 @@ export default async function run(args: string[]): Promise<void> {
         const batch = candidates.slice(i, i + BATCH_SIZE);
         const texts = batch.map((item) => embedText({ title: item.title, body: item.body }));
 
-        let vectors: number[][];
+        // Batch path: try the whole batch in one Ollama call.
+        // Per-item fallback: if the batch fails (typically because ONE item
+        // exceeds context length), retry items individually so the others
+        // still embed. Items that fail at size 1 are truly bad and skipped.
+        let vectors: (number[] | null)[] = [];
         try {
           vectors = await embedMany(texts);
-        } catch (err) {
-          if (successCount === 0) {
-            consecutiveFailsFromStart += batch.length;
-            if (consecutiveFailsFromStart >= 3) {
-              throw err;
+        } catch {
+          // Fall back to per-item embedding to isolate the offender.
+          for (let j = 0; j < texts.length; j++) {
+            try {
+              const single = await embedMany([texts[j]]);
+              vectors.push(single[0]);
+            } catch (perItemErr) {
+              if (successCount === 0) {
+                consecutiveFailsFromStart++;
+                if (consecutiveFailsFromStart >= 3) {
+                  throw perItemErr;
+                }
+              }
+              console.error(
+                `✗ Failed to embed ${kind} ${batch[j].github_node_id}: ${perItemErr}`,
+              );
+              failed++;
+              vectors.push(null);
             }
           }
-          for (const item of batch) {
-            console.error(`✗ Failed to embed ${kind} ${item.github_node_id}: ${err}`);
-            failed++;
-          }
-          continue;
         }
 
+        // Persist vectors for items that produced one.
         for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
           const vector = vectors[j];
+          if (vector === null) continue;
+          const item = batch[j];
           try {
             await db.query(
               "UPDATE $id SET embedding = $vector, embedded_content_hash = $hash",

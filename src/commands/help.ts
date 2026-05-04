@@ -8,6 +8,7 @@ export default function run(): void {
   console.log("  list     List registered repos (tool list [--json])");
   console.log("  remove   Unregister a repo (tool remove owner/name [--purge] [--yes])");
   console.log("  inspect  Inspect a mirrored repo snapshot (tool inspect owner/name [--json])");
+  console.log("  search   Semantic search across mirrored repos (tool search \"query\" [--repo owner/name] [--kind ...] [--limit N] [--json])");
   console.log("  help     Show this help message");
   process.exit(0);
 }

@@ -210,6 +210,10 @@ DEFINE TABLE IF NOT EXISTS has_label TYPE RELATION
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE has_label TYPE datetime;
 
 -- references: issue | pull_request  →  issue | pull_request (incl. cross-repo)
+-- Note: FROM/TO was not widened to include discussion | comment because the @surrealdb/wasm
+-- build used for in-memory testing does not support `DEFINE TABLE ... OVERWRITE`, so the
+-- IF NOT EXISTS guard cannot be replaced. Discussion and comment bodies are skipped in
+-- extractAndLinkCrossRefs until the WASM engine is updated.
 DEFINE TABLE IF NOT EXISTS references_ref TYPE RELATION
   FROM issue | pull_request
   TO issue | pull_request
@@ -223,16 +227,27 @@ DEFINE TABLE IF NOT EXISTS closes TYPE RELATION
   SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE closes TYPE datetime;
 
--- fixes: pull_request  →  issue
-DEFINE TABLE IF NOT EXISTS fixes TYPE RELATION
-  FROM pull_request
-  TO issue
-  SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS created_at ON TABLE fixes TYPE datetime;
-
 -- contains_commit: pull_request  →  commit
 DEFINE TABLE IF NOT EXISTS contains_commit TYPE RELATION
   FROM pull_request
   TO commit
   SCHEMAFULL;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE contains_commit TYPE datetime;
+
+-- =====================================================================
+-- dangling_reference — unresolved cross-references to un-mirrored targets
+-- =====================================================================
+DEFINE TABLE IF NOT EXISTS dangling_reference SCHEMAFULL;
+
+DEFINE FIELD IF NOT EXISTS parent        ON TABLE dangling_reference TYPE record<issue | pull_request | discussion | comment>;
+DEFINE FIELD IF NOT EXISTS target_owner  ON TABLE dangling_reference TYPE string;
+DEFINE FIELD IF NOT EXISTS target_repo   ON TABLE dangling_reference TYPE string;
+DEFINE FIELD IF NOT EXISTS target_number ON TABLE dangling_reference TYPE int;
+DEFINE FIELD IF NOT EXISTS ref_kind      ON TABLE dangling_reference TYPE string;
+DEFINE FIELD IF NOT EXISTS detected_at   ON TABLE dangling_reference TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX IF NOT EXISTS dangling_target ON TABLE dangling_reference FIELDS target_owner, target_repo;
+DEFINE INDEX IF NOT EXISTS dangling_parent ON TABLE dangling_reference FIELDS parent;
+
+-- fixes was merged into closes per issue #8 design decision (zero rows, zero callers)
+REMOVE TABLE IF EXISTS fixes;

@@ -1,0 +1,33 @@
+{
+  "repository": {
+    "pullRequest": {
+      "id": "PR_TEST_001",
+      "comments": {
+        "pageInfo": { "hasNextPage": false, "endCursor": null },
+        "nodes": [
+          {
+            "id": "PRC_001",
+            "url": "https://github.com/test/repo/pull/1#issuecomment-100",
+            "body": "First PR comment",
+            "createdAt": "2026-01-01T10:00:00Z",
+            "updatedAt": "2026-01-01T10:00:00Z",
+            "author": {
+              "__typename": "User",
+              "id": "U_001",
+              "login": "testuser",
+              "url": "https://github.com/testuser"
+            }
+          },
+          {
+            "id": "PRC_002",
+            "url": "https://github.com/test/repo/pull/1#issuecomment-101",
+            "body": null,
+            "createdAt": "2026-01-02T10:00:00Z",
+            "updatedAt": "2026-01-02T10:00:00Z",
+            "author": null
+          }
+        ]
+      }
+    }
+  }
+}

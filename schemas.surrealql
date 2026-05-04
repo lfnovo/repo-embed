@@ -162,6 +162,7 @@ DEFINE FIELD IF NOT EXISTS github_url        ON TABLE comment TYPE string;
 DEFINE FIELD IF NOT EXISTS parent_issue      ON TABLE comment TYPE option<record<issue>>;
 DEFINE FIELD IF NOT EXISTS parent_pr         ON TABLE comment TYPE option<record<pull_request>>;
 DEFINE FIELD IF NOT EXISTS parent_discussion ON TABLE comment TYPE option<record<discussion>>;
+DEFINE FIELD IF NOT EXISTS parent_comment    ON TABLE comment TYPE option<record<comment>>;
 DEFINE FIELD IF NOT EXISTS author            ON TABLE comment TYPE option<record<user>>;
 DEFINE FIELD IF NOT EXISTS body              ON TABLE comment TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at        ON TABLE comment TYPE datetime;

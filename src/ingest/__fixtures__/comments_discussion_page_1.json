@@ -1,0 +1,43 @@
+{
+  "repository": {
+    "discussion": {
+      "id": "D_TEST_001",
+      "comments": {
+        "pageInfo": { "hasNextPage": false, "endCursor": null },
+        "nodes": [
+          {
+            "id": "DC_001",
+            "url": "https://github.com/test/repo/discussions/1#discussioncomment-1",
+            "body": "Top-level discussion comment",
+            "createdAt": "2026-01-01T10:00:00Z",
+            "updatedAt": "2026-01-01T10:00:00Z",
+            "author": {
+              "__typename": "User",
+              "id": "U_001",
+              "login": "testuser",
+              "url": "https://github.com/testuser"
+            },
+            "replies": {
+              "pageInfo": { "hasNextPage": false, "endCursor": null },
+              "nodes": [
+                {
+                  "id": "DC_REPLY_001",
+                  "url": "https://github.com/test/repo/discussions/1#discussioncomment-2",
+                  "body": "Reply to top-level comment",
+                  "createdAt": "2026-01-01T11:00:00Z",
+                  "updatedAt": "2026-01-01T11:00:00Z",
+                  "author": {
+                    "__typename": "User",
+                    "id": "U_002",
+                    "login": "replyuser",
+                    "url": "https://github.com/replyuser"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

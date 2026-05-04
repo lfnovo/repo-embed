@@ -82,7 +82,9 @@ function fmtTimestamp(d: Date): string {
 }
 
 export default async function run(args: string[]): Promise<void> {
-  const input = args[0];
+  const fullFlag = args.includes('--full');
+  const repoArg = args.find(a => !a.startsWith('--'));
+  const input = repoArg;
   if (!input || !/^[^/]+\/[^/]+$/.test(input)) {
     console.error("✗ Usage: tool sync <owner/name>");
     process.exit(1);
@@ -93,8 +95,8 @@ export default async function run(args: string[]): Promise<void> {
   await withDb(async (db) => {
     // 1. Load repo node
     const [repoRows] = await db.query<
-      [Array<{ id: unknown; name_with_owner: string; registered_at: unknown }>]
-    >("SELECT id, name_with_owner, registered_at FROM repo WHERE name_with_owner = $nwo", {
+      [Array<{ id: unknown; name_with_owner: string; registered_at: unknown; last_synced_at: unknown }>]
+    >("SELECT id, name_with_owner, registered_at, last_synced_at FROM repo WHERE name_with_owner = $nwo", {
       nwo: input,
     });
     const repoRow = repoRows[0];
@@ -105,6 +107,17 @@ export default async function run(args: string[]): Promise<void> {
       id: String(repoRow.id),
       name_with_owner: repoRow.name_with_owner,
     };
+
+    const mode: 'full' | 'incremental' =
+      fullFlag || repoRow.last_synced_at == null ? 'full' : 'incremental';
+    const since: Date | undefined =
+      mode === 'incremental' ? new Date(repoRow.last_synced_at as string) : undefined;
+
+    if (mode === 'incremental') {
+      console.log(`Sync mode: incremental (since ${since!.toISOString()})`);
+    } else {
+      console.log('Sync mode: full');
+    }
 
     // 2. Refresh metadata
     const data = await gh<{ repository: GitHubRepo }>(REPO_QUERY, { owner, name });
@@ -196,7 +209,7 @@ export default async function run(args: string[]): Promise<void> {
 
     // 4. Issues
     let issueCount = 0;
-    for await (const parsed of fetchIssues(owner, name)) {
+    for await (const parsed of fetchIssues(owner, name, since)) {
       await persistIssue(db, repoRef, parsed);
       issueCount++;
     }
@@ -205,7 +218,7 @@ export default async function run(args: string[]): Promise<void> {
     // 5. Pull requests
     let prCount = 0;
     let commitCount = 0;
-    for await (const parsed of fetchPullRequests(owner, name)) {
+    for await (const parsed of fetchPullRequests(owner, name, since)) {
       commitCount += parsed.commits.length;
       await persistPullRequest(db, repoRef, parsed);
       prCount++;
@@ -214,7 +227,7 @@ export default async function run(args: string[]): Promise<void> {
 
     // 6. Discussions
     let discussionCount = 0;
-    for await (const parsed of fetchDiscussions(owner, name)) {
+    for await (const parsed of fetchDiscussions(owner, name, since)) {
       await persistDiscussion(db, repoRef, parsed);
       discussionCount++;
     }
@@ -236,16 +249,17 @@ export default async function run(args: string[]): Promise<void> {
       const kindLabel =
         kind === "issue" ? "issues" : kind === "pull_request" ? "PRs" : "discussions";
 
+      const sinceFilter = since ? ' AND updated_at > $since' : '';
       const [parents] = await db.query<
         [Array<{ id: unknown; number: number; github_node_id: string }>]
       >(
-        `SELECT id, number, github_node_id FROM ${kind} WHERE repo = $repoRef AND deleted_at IS NONE`,
-        { repoRef: new StringRecordId(repoRef.id) },
+        `SELECT id, number, github_node_id FROM ${kind} WHERE repo = $repoRef AND deleted_at IS NONE${sinceFilter}`,
+        { repoRef: new StringRecordId(repoRef.id), ...(since ? { since } : {}) },
       );
 
       for (const parent of parents) {
         const remoteIds: string[] = [];
-        for await (const c of fetchFn(owner, name, parent.number)) {
+        for await (const c of fetchFn(owner, name, parent.number, since)) {
           await persistComment(db, c);
           remoteIds.push(c.github_node_id);
           commentCount++;

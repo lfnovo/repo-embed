@@ -2,6 +2,7 @@ import { describe, it, expect, mock } from "bun:test";
 import type { Surreal } from "surrealdb";
 import { StringRecordId } from "surrealdb";
 import { withTestDb } from "../test_utils/with_test_db.ts";
+import { createContent } from "../clients/surreal_helpers.ts";
 
 let testDb: Surreal | null = null;
 let embedImpl: () => Promise<number[]> = async () => VEC_QUERY.slice();
@@ -102,33 +103,23 @@ async function seedIssue(
   suffix: string,
   opts: { number: number; title: string; embedding: number[] | null },
 ) {
-  const embeddingExpr = opts.embedding !== null ? "$embedding" : "NONE";
+  const content = createContent({
+    github_node_id: `I_${suffix}`,
+    github_url: `https://github.com/owner/repo/issues/${opts.number}`,
+    repo: repoRef,
+    number: opts.number,
+    title: opts.title,
+    body: "body",
+    state: "OPEN",
+    author: null,
+    deleted_at: null,
+    content_hash: `hash_${suffix}`,
+    embedding: opts.embedding,
+    embedded_content_hash: null,
+  });
   await db.query(
-    `CREATE issue CONTENT {
-      github_node_id: $gid,
-      github_url: $url,
-      repo: $repo,
-      number: $number,
-      title: $title,
-      body: 'body',
-      state: 'OPEN',
-      author: NONE,
-      created_at: time::now(),
-      updated_at: time::now(),
-      deleted_at: NONE,
-      content_hash: $hash,
-      embedding: ${embeddingExpr},
-      embedded_content_hash: NONE
-    }`,
-    {
-      gid: `I_${suffix}`,
-      url: `https://github.com/owner/repo/issues/${opts.number}`,
-      repo: repoRef,
-      number: opts.number,
-      title: opts.title,
-      hash: `hash_${suffix}`,
-      ...(opts.embedding !== null ? { embedding: opts.embedding } : {}),
-    },
+    `CREATE issue CONTENT ${content.sql.slice(0, -2)}, created_at: time::now(), updated_at: time::now() }`,
+    content.params,
   );
 }
 

@@ -5,6 +5,7 @@ import type { Surreal } from "surrealdb";
 import { paginate, gh } from "../clients/github.ts";
 import { isBot } from "./bot.ts";
 import { upsertUser } from "./user.ts";
+import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import type { ParsedUser } from "./types.ts";
 
 export type ParsedComment = {
@@ -352,72 +353,46 @@ export async function persistComment(db: Surreal, parsed: ParsedComment): Promis
     authorRef = new StringRecordId(id);
   }
 
-  const authorSql = parsed.author !== null ? "$author" : "NONE";
-  const parentIssueSql = parsed.parent_kind === "issue" ? "$parent_issue" : "NONE";
-  const parentPrSql = parsed.parent_kind === "pull_request" ? "$parent_pr" : "NONE";
-  const parentDiscussionSql = parsed.parent_kind === "discussion" ? "$parent_discussion" : "NONE";
-  const parentCommentSql = parsed.parent_comment_node_id !== null ? "$parent_comment" : "NONE";
-
   const [existing] = await db.query<[Array<{ id: unknown }>]>(
     "SELECT id FROM comment WHERE github_node_id = $github_node_id",
     { github_node_id: parsed.github_node_id },
   );
 
   if (existing.length === 0) {
+    const content = createContent({
+      github_node_id: parsed.github_node_id,
+      github_url: parsed.github_url,
+      parent_issue: parsed.parent_kind === "issue" ? parentRef : null,
+      parent_pr: parsed.parent_kind === "pull_request" ? parentRef : null,
+      parent_discussion: parsed.parent_kind === "discussion" ? parentRef : null,
+      parent_comment: parentCommentRef ?? null,
+      author: authorRef ?? null,
+      body: parsed.body,
+      created_at: parsed.created_at,
+      updated_at: parsed.updated_at,
+      deleted_at: null,
+      content_hash: parsed.content_hash,
+      embedding: null,
+    });
     await db.query(
-      `CREATE comment CONTENT {
-        github_node_id: $github_node_id,
-        github_url: $github_url,
-        parent_issue: ${parentIssueSql},
-        parent_pr: ${parentPrSql},
-        parent_discussion: ${parentDiscussionSql},
-        parent_comment: ${parentCommentSql},
-        author: ${authorSql},
-        body: $body,
-        created_at: $created_at,
-        updated_at: $updated_at,
-        deleted_at: NONE,
-        content_hash: $content_hash,
-        embedding: NONE
-      }`,
-      {
-        github_node_id: parsed.github_node_id,
-        github_url: parsed.github_url,
-        ...(parsed.parent_kind === "issue" ? { parent_issue: parentRef } : {}),
-        ...(parsed.parent_kind === "pull_request" ? { parent_pr: parentRef } : {}),
-        ...(parsed.parent_kind === "discussion" ? { parent_discussion: parentRef } : {}),
-        ...(parsed.parent_comment_node_id !== null ? { parent_comment: parentCommentRef } : {}),
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        body: parsed.body,
-        created_at: parsed.created_at,
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `CREATE comment CONTENT ${content.sql}`,
+      content.params,
     );
   } else {
+    const set = updateSet({
+      github_url: parsed.github_url,
+      parent_issue: parsed.parent_kind === "issue" ? parentRef : null,
+      parent_pr: parsed.parent_kind === "pull_request" ? parentRef : null,
+      parent_discussion: parsed.parent_kind === "discussion" ? parentRef : null,
+      parent_comment: parentCommentRef ?? null,
+      author: authorRef ?? null,
+      body: parsed.body,
+      updated_at: parsed.updated_at,
+      content_hash: parsed.content_hash,
+    });
     await db.query(
-      `UPDATE $id SET
-        github_url = $github_url,
-        parent_issue = ${parentIssueSql},
-        parent_pr = ${parentPrSql},
-        parent_discussion = ${parentDiscussionSql},
-        parent_comment = ${parentCommentSql},
-        author = ${authorSql},
-        body = $body,
-        updated_at = $updated_at,
-        content_hash = $content_hash`,
-      {
-        id: new StringRecordId(String(existing[0].id)),
-        github_url: parsed.github_url,
-        ...(parsed.parent_kind === "issue" ? { parent_issue: parentRef } : {}),
-        ...(parsed.parent_kind === "pull_request" ? { parent_pr: parentRef } : {}),
-        ...(parsed.parent_kind === "discussion" ? { parent_discussion: parentRef } : {}),
-        ...(parsed.parent_comment_node_id !== null ? { parent_comment: parentCommentRef } : {}),
-        ...(parsed.author !== null ? { author: authorRef } : {}),
-        body: parsed.body,
-        updated_at: parsed.updated_at,
-        content_hash: parsed.content_hash,
-      },
+      `UPDATE $id ${set.sql}`,
+      { id: new StringRecordId(String(existing[0].id)), ...set.params },
     );
   }
 }

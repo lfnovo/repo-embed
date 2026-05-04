@@ -2,6 +2,7 @@ import { z } from "zod";
 import { StringRecordId } from "surrealdb";
 import type { Surreal } from "surrealdb";
 import { paginate } from "../clients/github.ts";
+import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import type { ParsedLabel, RepoRef } from "./types.ts";
 
 const LabelNodeSchema = z.object({
@@ -57,8 +58,6 @@ export async function persistLabelCatalog(
   parsed: ParsedLabel,
 ): Promise<void> {
   const repoRef = new StringRecordId(repo.id);
-  const descSql = parsed.description === null ? "NONE" : "$description";
-  const descParam = parsed.description !== null ? { description: parsed.description } : {};
 
   const [existing] = await db.query<[Array<{ id: unknown }>]>(
     "SELECT id FROM label WHERE github_node_id = $github_node_id",
@@ -66,40 +65,28 @@ export async function persistLabelCatalog(
   );
 
   if (existing.length === 0) {
+    const content = createContent({
+      github_node_id: parsed.github_node_id,
+      repo: repoRef,
+      name: parsed.name,
+      color: parsed.color,
+      description: parsed.description,
+      deleted_at: null,
+    });
     await db.query(
-      `CREATE label CONTENT {
-        github_node_id: $github_node_id,
-        repo: $repo,
-        name: $name,
-        color: $color,
-        description: ${descSql},
-        created_at: time::now(),
-        updated_at: time::now(),
-        deleted_at: NONE
-      }`,
-      {
-        github_node_id: parsed.github_node_id,
-        repo: repoRef,
-        name: parsed.name,
-        color: parsed.color,
-        ...descParam,
-      },
+      `CREATE label CONTENT ${content.sql.slice(0, -2)}, created_at: time::now(), updated_at: time::now() }`,
+      content.params,
     );
   } else {
+    const set = updateSet({
+      name: parsed.name,
+      color: parsed.color,
+      description: parsed.description,
+      repo: repoRef,
+    });
     await db.query(
-      `UPDATE $id SET
-        name = $name,
-        color = $color,
-        description = ${descSql},
-        updated_at = time::now(),
-        repo = $repo`,
-      {
-        id: existing[0].id,
-        name: parsed.name,
-        color: parsed.color,
-        repo: repoRef,
-        ...descParam,
-      },
+      `UPDATE $id ${set.sql}, updated_at = time::now()`,
+      { id: existing[0].id, ...set.params },
     );
   }
 }
@@ -125,45 +112,31 @@ export async function upsertLabelsAndEdges(
       { github_node_id: label.github_node_id },
     );
 
-    const descSql = label.description === null ? "NONE" : "$description";
-    const descParam = label.description !== null ? { description: label.description } : {};
-
     let labelId: unknown;
     if (existing.length === 0) {
+      const content = createContent({
+        github_node_id: label.github_node_id,
+        repo: repoId as object,
+        name: label.name,
+        color: label.color,
+        description: label.description,
+        deleted_at: null,
+      });
       const [created] = await db.query<[Array<{ id: unknown }>]>(
-        `CREATE label CONTENT {
-          github_node_id: $github_node_id,
-          repo: $repo,
-          name: $name,
-          color: $color,
-          description: ${descSql},
-          created_at: time::now(),
-          updated_at: time::now(),
-          deleted_at: NONE
-        }`,
-        {
-          github_node_id: label.github_node_id,
-          repo: repoId,
-          name: label.name,
-          color: label.color,
-          ...descParam,
-        },
+        `CREATE label CONTENT ${content.sql.slice(0, -2)}, created_at: time::now(), updated_at: time::now() }`,
+        content.params,
       );
       labelId = created[0].id;
     } else {
       labelId = existing[0].id;
+      const set = updateSet({
+        name: label.name,
+        color: label.color,
+        description: label.description,
+      });
       await db.query(
-        `UPDATE $id SET
-          name = $name,
-          color = $color,
-          description = ${descSql},
-          updated_at = time::now()`,
-        {
-          id: labelId,
-          name: label.name,
-          color: label.color,
-          ...descParam,
-        },
+        `UPDATE $id ${set.sql}, updated_at = time::now()`,
+        { id: labelId, ...set.params },
       );
     }
     labelIds.push(labelId);

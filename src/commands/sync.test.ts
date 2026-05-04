@@ -300,3 +300,111 @@ describe("sync command — incremental mode", () => {
     testDb = null;
   });
 });
+
+describe("sync command — --full flag", () => {
+  it("forces full mode even when last_synced_at is set (flag after repo arg)", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+
+      // Pre-seed org
+      const [orgRows] = await db.query<[Array<{ id: unknown }>]>(
+        `CREATE org CONTENT {
+          github_node_id: 'ORG_GH_ID',
+          github_url: 'https://github.com/lfnovo',
+          login: 'lfnovo',
+          name: 'Luis',
+          kind: 'User',
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE
+        }`,
+      );
+      const orgId = orgRows[0].id;
+
+      // Pre-seed repo with last_synced_at set — would normally trigger incremental mode
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_GH_ID',
+          github_url: 'https://github.com/lfnovo/test-repo',
+          name: 'test-repo',
+          name_with_owner: 'lfnovo/test-repo',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now(),
+          last_synced_at: $lastSyncedAt
+        }`,
+        { owner: orgId, lastSyncedAt: new Date('2024-06-01T00:00:00Z') },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(["lfnovo/test-repo", "--full"]); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l === 'Sync mode: full')).toBe(true);
+
+      const [[{ count: issueCount }]] = await db.query<[[{ count: number }]]>(
+        "SELECT count() FROM issue GROUP ALL",
+      );
+      expect(issueCount).toBe(1);
+    });
+    testDb = null;
+  });
+
+  it("forces full mode when --full flag appears before the repo arg", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+
+      // Pre-seed org
+      const [orgRows] = await db.query<[Array<{ id: unknown }>]>(
+        `CREATE org CONTENT {
+          github_node_id: 'ORG_GH_ID',
+          github_url: 'https://github.com/lfnovo',
+          login: 'lfnovo',
+          name: 'Luis',
+          kind: 'User',
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE
+        }`,
+      );
+      const orgId = orgRows[0].id;
+
+      // Pre-seed repo with last_synced_at set
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_GH_ID',
+          github_url: 'https://github.com/lfnovo/test-repo',
+          name: 'test-repo',
+          name_with_owner: 'lfnovo/test-repo',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now(),
+          last_synced_at: $lastSyncedAt
+        }`,
+        { owner: orgId, lastSyncedAt: new Date('2024-06-01T00:00:00Z') },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(["--full", "lfnovo/test-repo"]); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l === 'Sync mode: full')).toBe(true);
+
+      const [[{ count: issueCount }]] = await db.query<[[{ count: number }]]>(
+        "SELECT count() FROM issue GROUP ALL",
+      );
+      expect(issueCount).toBe(1);
+    });
+    testDb = null;
+  });
+});

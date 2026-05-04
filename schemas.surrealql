@@ -17,7 +17,9 @@ DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE org TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE org TYPE option<datetime>;
 
 DEFINE INDEX IF NOT EXISTS org_node_id_uniq ON TABLE org FIELDS github_node_id UNIQUE;
-DEFINE INDEX IF NOT EXISTS org_login_uniq   ON TABLE org FIELDS login UNIQUE;
+-- login is NOT unique: GitHub allows account renames and reuse of old logins
+-- by new accounts. We dedupe by github_node_id (the real PK) only.
+REMOVE INDEX IF EXISTS org_login_uniq ON TABLE org;
 
 -- =====================================================================
 -- repo — a mirrored GitHub repository
@@ -56,7 +58,10 @@ DEFINE FIELD IF NOT EXISTS updated_at     ON TABLE user TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at     ON TABLE user TYPE option<datetime>;
 
 DEFINE INDEX IF NOT EXISTS user_node_id_uniq ON TABLE user FIELDS github_node_id UNIQUE;
-DEFINE INDEX IF NOT EXISTS user_login_uniq   ON TABLE user FIELDS login UNIQUE;
+-- login is NOT unique: GitHub allows account renames and reuse of old logins
+-- by new accounts. We dedupe by github_node_id (the real PK) only.
+-- Surfaced during the first end-to-end sync of `lfnovo/esperanto`.
+REMOVE INDEX IF EXISTS user_login_uniq ON TABLE user;
 
 -- =====================================================================
 -- label — a label on issues/PRs/discussions (scoped to a repo)

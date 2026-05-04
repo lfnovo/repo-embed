@@ -1,14 +1,16 @@
 // Hard cap to stay inside `nomic-embed-text`'s 8192-token context window.
-// 8000 chars is the safe-regardless-of-tokenization figure: even at
-// 1 char per token (worst case for dense code, non-Latin scripts, or
-// heavily-tokenized symbols), this stays under the 8192-token context.
-// Items longer than this lose their tail in the embedding only — the
-// full body remains on the row for retrieval-time access.
+// 6000 chars is the empirically-determined safe figure for this corpus:
+// the densest item in lfnovo/esperanto (a 7995-char comment) exceeds the
+// context at 7000+ chars but works at ≤ 6500. We pick 6000 for headroom.
 //
-// (The earlier 24000-char value, derived from a 4-chars-per-token
-// English-prose assumption, failed end-to-end on lfnovo/esperanto when
-// a PR body's tokenization came out far denser than the heuristic.)
-export const EMBED_TEXT_MAX_CHARS = 8000;
+// At 8192 tokens / 6000 chars ≈ 1.4 tokens/char, this is conservative for
+// most real-world text. Items longer than the cap lose their tail in the
+// embedding only — the full body is preserved on the row for retrieval-
+// time access.
+//
+// Future, when long-item retrieval quality matters: chunk into multiple
+// embeddings per item (open in VISION).
+export const EMBED_TEXT_MAX_CHARS = 6000;
 
 export function embedText(node: { title?: string | null; body: string | null }): string {
   const title = node.title ?? "";

@@ -244,3 +244,59 @@ describe("sync command — repo not registered", () => {
     testDb = null;
   });
 });
+
+describe("sync command — incremental mode", () => {
+  it("logs incremental mode with timestamp and updates last_synced_at", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+
+      // Pre-seed org
+      const [orgRows] = await db.query<[Array<{ id: unknown }>]>(
+        `CREATE org CONTENT {
+          github_node_id: 'ORG_GH_ID',
+          github_url: 'https://github.com/lfnovo',
+          login: 'lfnovo',
+          name: 'Luis',
+          kind: 'User',
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE
+        }`,
+      );
+      const orgId = orgRows[0].id;
+
+      // Pre-seed repo with last_synced_at already set (simulating a second sync)
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_GH_ID',
+          github_url: 'https://github.com/lfnovo/test-repo',
+          name: 'test-repo',
+          name_with_owner: 'lfnovo/test-repo',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now(),
+          last_synced_at: $lastSyncedAt
+        }`,
+        { owner: orgId, lastSyncedAt: new Date('2024-06-01T00:00:00Z') },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(["lfnovo/test-repo"]); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l.startsWith('Sync mode: incremental (since '))).toBe(true);
+
+      const [[repoRow]] = await db.query<[[{ last_synced_at: unknown }]]>(
+        "SELECT last_synced_at FROM repo WHERE name_with_owner = $nwo",
+        { nwo: "lfnovo/test-repo" },
+      );
+      expect(new Date(String(repoRow.last_synced_at)) > new Date('2024-06-01T00:00:00Z')).toBe(true);
+    });
+    testDb = null;
+  });
+});

@@ -238,3 +238,26 @@ describe("fetchIssues mock", () => {
     expect(issue1.body).toContain("\n");
   });
 });
+
+// ─── 5. fetchIssues — since filter ───────────────────────────────────────────
+
+describe("fetchIssues — since filter", () => {
+  it("yields all items when since predates all fixture items", async () => {
+    const items: ParsedIssue[] = [];
+    for await (const issue of fetchIssues("test", "repo", new Date("2020-01-01"))) {
+      items.push(issue);
+    }
+    // All fixture items have updatedAt in 2026; none trigger early-break
+    expect(items.length).toBe(3);
+  });
+
+  it("early-breaks after first item when since falls within fixture range", async () => {
+    const items: ParsedIssue[] = [];
+    // I_001 updatedAt is 2026-01-02T00:00:00Z; since is noon that day → break fires after I_001
+    for await (const issue of fetchIssues("test", "repo", new Date("2026-01-02T12:00:00Z"))) {
+      items.push(issue);
+    }
+    expect(items.length).toBe(1);
+    expect(items[0].github_node_id).toBe("I_001");
+  });
+});

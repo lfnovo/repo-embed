@@ -321,6 +321,31 @@ describe("fetchDiscussions mock", () => {
   });
 });
 
+// ─── 7. fetchDiscussions — since filter ──────────────────────────────────────
+
+describe("fetchDiscussions — since filter", () => {
+  it("yields all items when since predates all fixture items", async () => {
+    ghProbeResult = { repository: { hasDiscussionsEnabled: true } };
+    const items: ParsedDiscussion[] = [];
+    for await (const d of fetchDiscussions("test", "repo", new Date("2020-01-01"))) {
+      items.push(d);
+    }
+    // All fixture items have updatedAt in 2026; none trigger early-break
+    expect(items.length).toBe(3);
+  });
+
+  it("early-breaks after first item when since falls within fixture range", async () => {
+    ghProbeResult = { repository: { hasDiscussionsEnabled: true } };
+    const items: ParsedDiscussion[] = [];
+    // D_001 updatedAt is 2026-01-02T00:00:00Z; since is noon that day → break fires after D_001
+    for await (const d of fetchDiscussions("test", "repo", new Date("2026-01-02T12:00:00Z"))) {
+      items.push(d);
+    }
+    expect(items.length).toBe(1);
+    expect(items[0].github_node_id).toBe("D_001");
+  });
+});
+
 // ─── 7. fetchDiscussions hasDiscussionsEnabled=false ─────────────────────────
 
 describe("fetchDiscussions hasDiscussionsEnabled=false", () => {

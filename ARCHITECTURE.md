@@ -202,6 +202,16 @@ Helpers that paginate over remote APIs (GitHub GraphQL connections, SurrealDB li
 
 **Origin:** Issue #1, 2026-05-03.
 
+### Soft-deletes cascade passively, not actively
+
+When a node is tombstoned (`deleted_at` set), its children are NOT auto-tombstoned. Queries that need to exclude tombstoned data traverse parent links and filter at each level. Reversal — un-tombstoning the parent — restores the cascade automatically.
+
+**Why:** Active cascade requires write fan-out on every delete, needs bookkeeping to distinguish cascaded tombstones from intentional ones (otherwise un-tombstoning the parent leaves children dead), and complicates recovery semantics. Passive cascade is just a query convention with the right traversal — no extra writes, fully reversible, naturally idempotent.
+
+**Scope:** All node soft-delete operations — `tool remove --purge`, `tombstoneMissingComments`, deletion reconciliation. Edges follow their own (structural / relational) lifecycle per the existing edge principle; this rule is about node tombstones cascading through other node tombstones.
+
+**Origin:** Issue #15, 2026-05-04.
+
 ### Item-level failures don't fail the batch
 
 In phases that process many independent items (embed pass, batch extractions, future post-processing), a single item's failure is logged and skipped, not propagated. Infrastructure-level failures (the embedder daemon is down, the database is unreachable) DO propagate and crash the run. The split is detected by the first-success heuristic: errors before any successful item in the run are treated as infrastructure; errors after at least one success are treated as per-item.

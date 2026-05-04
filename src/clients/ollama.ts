@@ -1,5 +1,11 @@
 import { config } from "../config.ts";
 
+const MIN_FALLBACK_CHARS = 256;
+
+function isContextLengthError(err: unknown): boolean {
+  return err instanceof Error && /context length/i.test(err.message);
+}
+
 export async function embedMany(texts: string[]): Promise<number[][]> {
   const url = `${config.OLLAMA_URL}/api/embed`;
   const response = await fetch(url, {
@@ -33,4 +39,22 @@ export async function embedMany(texts: string[]): Promise<number[][]> {
 export async function embed(text: string): Promise<number[]> {
   const result = await embedMany([text]);
   return result[0];
+}
+
+export async function embedWithFallback(text: string): Promise<number[]> {
+  let len = text.length;
+  while (true) {
+    try {
+      const result = await embedMany([text.slice(0, len)]);
+      return result[0];
+    } catch (err) {
+      if (!isContextLengthError(err)) throw err;
+      len = Math.floor(len / 2);
+      if (len < MIN_FALLBACK_CHARS) {
+        throw new Error(
+          "could not embed at any length: text exceeds context even at minimum",
+        );
+      }
+    }
+  }
 }

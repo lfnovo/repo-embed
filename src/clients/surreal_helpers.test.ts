@@ -41,6 +41,11 @@ describe("updateSet", () => {
     expect(result.sql).toBe("SET ");
     expect(result.params).toEqual({});
   });
+
+  test("empty input {} produces empty SET clause", () => {
+    const result = updateSet({});
+    expect(result).toEqual({ sql: "SET ", params: {} });
+  });
 });
 
 describe("createContent", () => {
@@ -78,5 +83,11 @@ describe("createContent", () => {
   test("boolean value binds via $fieldName", () => {
     const result = createContent({ active: true });
     expect(result).toEqual({ sql: "{ active: $active }", params: { active: true } });
+  });
+
+  test("empty input {} produces empty content literal", () => {
+    const result = createContent({});
+    expect(result.sql).toMatch(/^\{[\s]*\}$/);
+    expect(result.params).toEqual({});
   });
 });

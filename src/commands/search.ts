@@ -139,7 +139,7 @@ export default async function run(args: string[]): Promise<void> {
          FROM ${kind}
          WHERE embedding != NONE
            AND deleted_at IS NONE
-           AND repo IN $repos
+           AND $repos CONTAINS repo
          ORDER BY score DESC LIMIT $limit`,
         { vec, repos: repoRefs, limit: limitNum },
       );
@@ -159,15 +159,15 @@ export default async function run(args: string[]): Promise<void> {
 
     if (activeKinds.includes("comment")) {
       const [issueIdRows] = await db.query<[Array<{ id: unknown }>]>(
-        "SELECT id FROM issue WHERE repo IN $repos AND deleted_at IS NONE",
+        "SELECT id FROM issue WHERE $repos CONTAINS repo AND deleted_at IS NONE",
         { repos: repoRefs },
       );
       const [prIdRows] = await db.query<[Array<{ id: unknown }>]>(
-        "SELECT id FROM pull_request WHERE repo IN $repos AND deleted_at IS NONE",
+        "SELECT id FROM pull_request WHERE $repos CONTAINS repo AND deleted_at IS NONE",
         { repos: repoRefs },
       );
       const [discIdRows] = await db.query<[Array<{ id: unknown }>]>(
-        "SELECT id FROM discussion WHERE repo IN $repos AND deleted_at IS NONE",
+        "SELECT id FROM discussion WHERE $repos CONTAINS repo AND deleted_at IS NONE",
         { repos: repoRefs },
       );
 
@@ -193,7 +193,7 @@ export default async function run(args: string[]): Promise<void> {
            FROM comment
            WHERE embedding != NONE
              AND deleted_at IS NONE
-             AND (parent_issue IN $issueIds OR parent_pr IN $prIds OR parent_discussion IN $discIds)
+             AND ($issueIds CONTAINS parent_issue OR $prIds CONTAINS parent_pr OR $discIds CONTAINS parent_discussion)
            ORDER BY score DESC LIMIT $limit`,
           { vec, issueIds, prIds, discIds, limit: limitNum },
         );

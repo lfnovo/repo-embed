@@ -405,14 +405,23 @@ export default async function run(args: string[]): Promise<void> {
       repos = rows;
     });
 
+    if (repos.length === 0) {
+      console.log("(no repos registered — use `tool add` first)");
+      return;
+    }
+
     if (json) {
       const snapshots: (Snapshot & { name_with_owner: string })[] = [];
       for (const repo of repos) {
         const [owner, name] = repo.name_with_owner.split("/");
-        await withDb(async (db) => {
-          const snapshot = await buildSnapshot(db, repo, owner, name);
-          snapshots.push({ ...snapshot, name_with_owner: repo.name_with_owner });
-        });
+        try {
+          await withDb(async (db) => {
+            const snapshot = await buildSnapshot(db, repo, owner, name);
+            snapshots.push({ ...snapshot, name_with_owner: repo.name_with_owner });
+          });
+        } catch (err) {
+          console.error(`✗ ${repo.name_with_owner} failed: ${(err as Error).message}`);
+        }
       }
       console.log(JSON.stringify(snapshots));
       return;
@@ -424,10 +433,14 @@ export default async function run(args: string[]): Promise<void> {
       first = false;
       console.log(`==> ${repo.name_with_owner}`);
       const [owner, name] = repo.name_with_owner.split("/");
-      await withDb(async (db) => {
-        const snapshot = await buildSnapshot(db, repo, owner, name);
-        renderHuman(snapshot, repo.name_with_owner);
-      });
+      try {
+        await withDb(async (db) => {
+          const snapshot = await buildSnapshot(db, repo, owner, name);
+          renderHuman(snapshot, repo.name_with_owner);
+        });
+      } catch (err) {
+        console.error(`✗ ${repo.name_with_owner} failed: ${(err as Error).message}`);
+      }
     }
     return;
   }

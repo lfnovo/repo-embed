@@ -332,13 +332,31 @@ export default async function run(args: string[]): Promise<void> {
       repos = rows;
     });
 
+    if (repos.length === 0) {
+      console.log("(no repos registered — use `tool add` first)");
+      return;
+    }
+
+    let succeeded = 0;
+    let failed = 0;
+    const total = repos.length;
+
     for (const repo of repos) {
       const [owner, name] = repo.name_with_owner.split("/");
       console.log(`==> ${repo.name_with_owner}`);
-      await withDb(async (db) => {
-        await syncForRepo(db, owner, name, repo.name_with_owner, fullFlag, reconcileFlag);
-      });
+      try {
+        await withDb(async (db) => {
+          await syncForRepo(db, owner, name, repo.name_with_owner, fullFlag, reconcileFlag);
+        });
+        succeeded++;
+      } catch (err) {
+        console.error(`✗ ${repo.name_with_owner} failed: ${(err as Error).message}`);
+        failed++;
+      }
     }
+
+    console.log(`✓ Bulk sync: ${succeeded}/${total} succeeded, ${failed} failed`);
+    if (failed > 0) process.exit(1);
     return;
   }
 

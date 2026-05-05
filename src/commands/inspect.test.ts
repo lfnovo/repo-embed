@@ -4,9 +4,17 @@ import { StringRecordId } from "surrealdb";
 import { withTestDb } from "../test_utils/with_test_db.ts";
 
 let _testDb: Surreal;
+let _withDbCallCount = 0;
+let _withDbFailOnCall: number | null = null;
 
 mock.module("../clients/surreal.ts", () => ({
-  withDb: (fn: (db: Surreal) => Promise<unknown>) => fn(_testDb),
+  withDb: async (fn: (db: Surreal) => Promise<unknown>) => {
+    _withDbCallCount++;
+    if (_withDbFailOnCall !== null && _withDbCallCount === _withDbFailOnCall) {
+      throw new Error("simulated db failure");
+    }
+    return fn(_testDb);
+  },
 }));
 
 const { default: run } = await import("./inspect.ts");
@@ -353,6 +361,54 @@ describe("inspect command — --all flag", () => {
       expect(arr.length).toBe(2);
       const nwos = arr.map((r) => r.name_with_owner).sort();
       expect(nwos).toEqual(["testorg/testrepo", "testorg2/testrepo2"]);
+    });
+  });
+});
+
+describe("inspect command — --all empty repos", () => {
+  it("prints friendly message and exits 0 when no repos are registered", async () => {
+    await withTestDb(async (db) => {
+      _testDb = db;
+      _withDbCallCount = 0;
+      _withDbFailOnCall = null;
+
+      const output = await captureLog(() => run(["--all"]));
+
+      expect(output).toContain("no repos registered");
+    });
+  });
+});
+
+describe("inspect command — --all error isolation", () => {
+  it("logs ✗ for failing repo, continues to next, exits 0", async () => {
+    await withTestDb(async (db) => {
+      _testDb = db;
+      _withDbCallCount = 0;
+      // call 1: initial repos list query; call 2: first repo's buildSnapshot → fails
+      _withDbFailOnCall = 2;
+
+      await seedInspect(db);
+      await seedSecondRepo(db);
+
+      const errors: string[] = [];
+      const logs: string[] = [];
+      const origErr = console.error;
+      const origLog = console.log;
+      console.error = (...args: unknown[]) => { errors.push(args.join(" ")); };
+      console.log = (...args: unknown[]) => { logs.push(args.join(" ")); };
+
+      try {
+        await run(["--all"]);
+      } finally {
+        console.error = origErr;
+        console.log = origLog;
+        _withDbFailOnCall = null;
+      }
+
+      // Error logged for the first repo (testorg/testrepo, alphabetically first)
+      expect(errors.some(l => l.includes("✗") && l.includes("testorg/testrepo"))).toBe(true);
+      // Second repo still rendered (its header was printed before failure)
+      expect(logs.some(l => l.includes("testorg2/testrepo2"))).toBe(true);
     });
   });
 });

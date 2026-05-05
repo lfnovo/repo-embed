@@ -4,6 +4,7 @@ import { withTestDb } from "../test_utils/with_test_db.ts";
 
 let testDb: Surreal | null = null;
 let ghCallCount = 0;
+let ghThrowFor: string | null = null;
 
 const REPO_GH_FIXTURE = {
   repository: {
@@ -28,8 +29,12 @@ const REPO_GH_FIXTURE = {
 };
 
 mock.module("../clients/github.ts", () => ({
-  gh: async (query: string) => {
+  gh: async (query: string, variables: Record<string, unknown> = {}) => {
     ghCallCount++;
+    const nwo = variables.owner && variables.name ? `${variables.owner}/${variables.name}` : null;
+    if (ghThrowFor && nwo === ghThrowFor) {
+      throw new Error(`simulated failure for ${nwo}`);
+    }
     if (query.includes("nameWithOwner") || query.includes("isPrivate")) {
       return REPO_GH_FIXTURE;
     }
@@ -556,6 +561,190 @@ describe("sync command — idempotency", () => {
 
       // last_synced_at must have advanced on the second run
       expect(ts2 > ts1).toBe(true);
+    });
+    testDb = null;
+  });
+});
+
+async function runCapturingExit(
+  fn: () => Promise<void>,
+): Promise<{ exitCode: number | undefined }> {
+  const orig = process.exit;
+  let exitCode: number | undefined;
+  (process as any).exit = (code?: number) => {
+    exitCode = code;
+    throw new Error(`__exit__${code}`);
+  };
+  try {
+    await fn();
+  } catch (e) {
+    if (!(e instanceof Error && e.message.startsWith("__exit__"))) {
+      (process as any).exit = orig;
+      throw e;
+    }
+  } finally {
+    (process as any).exit = orig;
+  }
+  return { exitCode };
+}
+
+describe("sync command — --all empty repos", () => {
+  it("prints friendly message and exits 0 when no repos are registered", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(['--all']); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l.includes("no repos registered"))).toBe(true);
+      expect(ghCallCount).toBe(0);
+    });
+    testDb = null;
+  });
+});
+
+describe("sync command — --all failure isolation", () => {
+  it("catches one failing repo, logs ✗, continues, prints summary, exits 1", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+      ghThrowFor = "lfnovo/repo-fail";
+
+      const [orgRows] = await db.query<[Array<{ id: unknown }>]>(
+        `CREATE org CONTENT {
+          github_node_id: 'ORG_FI',
+          github_url: 'https://github.com/lfnovo',
+          login: 'lfnovo',
+          name: 'Luis',
+          kind: 'User',
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE
+        }`,
+      );
+      const orgId = orgRows[0].id;
+
+      // repo-fail comes before repo-ok alphabetically
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_FAIL',
+          github_url: 'https://github.com/lfnovo/repo-fail',
+          name: 'repo-fail',
+          name_with_owner: 'lfnovo/repo-fail',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now()
+        }`,
+        { owner: orgId },
+      );
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_OK',
+          github_url: 'https://github.com/lfnovo/repo-ok',
+          name: 'repo-ok',
+          name_with_owner: 'lfnovo/repo-ok',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now()
+        }`,
+        { owner: orgId },
+      );
+
+      const logs: string[] = [];
+      const errors: string[] = [];
+      const origLog = console.log;
+      const origErr = console.error;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      console.error = (...args: unknown[]) => { errors.push(args.map(String).join(' ')); };
+
+      let result: { exitCode: number | undefined };
+      try {
+        result = await runCapturingExit(() => run(['--all']));
+      } finally {
+        console.log = origLog;
+        console.error = origErr;
+        ghThrowFor = null;
+      }
+
+      expect(result!.exitCode).toBe(1);
+      expect(errors.some(l => l.includes('✗') && l.includes('lfnovo/repo-fail'))).toBe(true);
+      // repo-ok still ran
+      expect(logs.some(l => l === '==> lfnovo/repo-ok')).toBe(true);
+      // summary line
+      expect(logs.some(l => l.includes('1/2') && l.includes('1 failed'))).toBe(true);
+    });
+    testDb = null;
+  });
+
+  it("prints summary with 0 failed and exits 0 when all repos succeed", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+      ghThrowFor = null;
+
+      const [orgRows] = await db.query<[Array<{ id: unknown }>]>(
+        `CREATE org CONTENT {
+          github_node_id: 'ORG_OK2',
+          github_url: 'https://github.com/lfnovo',
+          login: 'lfnovo',
+          name: 'Luis',
+          kind: 'User',
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE
+        }`,
+      );
+      const orgId = orgRows[0].id;
+
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_S1',
+          github_url: 'https://github.com/lfnovo/repo-s1',
+          name: 'repo-s1',
+          name_with_owner: 'lfnovo/repo-s1',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now()
+        }`,
+        { owner: orgId },
+      );
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_S2',
+          github_url: 'https://github.com/lfnovo/repo-s2',
+          name: 'repo-s2',
+          name_with_owner: 'lfnovo/repo-s2',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now()
+        }`,
+        { owner: orgId },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      const { exitCode } = await runCapturingExit(async () => {
+        try { await run(['--all']); } finally { console.log = origLog; }
+      });
+
+      expect(exitCode).toBeUndefined();
+      expect(logs.some(l => l.includes('2/2') && l.includes('0 failed'))).toBe(true);
     });
     testDb = null;
   });

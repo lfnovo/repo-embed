@@ -141,7 +141,7 @@ async function embedForRepo(db: Surreal, nwo: string): Promise<void> {
 
   console.log(`✓ Total: ${totalEmbedded} embedded, ${totalFailed} failed`);
   if (totalFailed > 0) {
-    process.exit(1);
+    throw new Error(`embed completed with ${totalFailed} failed item(s)`);
   }
 }
 
@@ -165,12 +165,30 @@ export default async function run(args: string[]): Promise<void> {
       repos = rows;
     });
 
+    if (repos.length === 0) {
+      console.log("(no repos registered — use `tool add` first)");
+      return;
+    }
+
+    let succeeded = 0;
+    let failed = 0;
+    const total = repos.length;
+
     for (const repo of repos) {
       console.log(`==> ${repo.name_with_owner}`);
-      await withDb(async (db) => {
-        await embedForRepo(db, repo.name_with_owner);
-      });
+      try {
+        await withDb(async (db) => {
+          await embedForRepo(db, repo.name_with_owner);
+        });
+        succeeded++;
+      } catch (err) {
+        console.error(`✗ ${repo.name_with_owner} failed: ${(err as Error).message}`);
+        failed++;
+      }
     }
+
+    console.log(`✓ Bulk embed: ${succeeded}/${total} succeeded, ${failed} failed`);
+    if (failed > 0) process.exit(1);
     return;
   }
 
@@ -198,6 +216,10 @@ export default async function run(args: string[]): Promise<void> {
       process.exit(1);
     }
 
-    await embedForRepo(db, input);
+    try {
+      await embedForRepo(db, input);
+    } catch {
+      process.exit(1);
+    }
   });
 }

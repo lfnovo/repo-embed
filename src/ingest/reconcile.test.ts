@@ -322,4 +322,47 @@ describe("reconcileTopLevel — passive cascade", () => {
       expect(c1[0].is_none).toBe(true);
     });
   });
+
+  describe("discussions error handling", () => {
+    it("silently skips when GitHub reports discussions are not enabled", async () => {
+      await withTestDb(async (db) => {
+        const repoId = await setupRepo(db, "DiscDis");
+        const repo = { id: repoId, name_with_owner: "orgDiscDis/repo" };
+        await setupDiscussion(db, repoId, "D_LOCAL", 1);
+
+        const mockGh: GhFn = async <T>(query: string): Promise<T> => {
+          if (query.includes("FetchIssueIds") || query.includes("FetchPrIds")) {
+            return { repository: { [query.includes("FetchIssueIds") ? "issues" : "pullRequests"]: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } as T;
+          }
+          if (query.includes("FetchDiscussionIds")) {
+            throw new Error("Discussions are not enabled for this repository");
+          }
+          throw new Error("Unexpected query");
+        };
+
+        const result = await reconcileTopLevel(db, repo, "orgDiscDis", "repo", mockGh);
+        // Discussion not tombstoned because the path was skipped, not run.
+        expect(result.discussions_tombstoned).toBe(0);
+      });
+    });
+
+    it("propagates unrelated errors that happen to contain 'disabled'", async () => {
+      await withTestDb(async (db) => {
+        const repoId = await setupRepo(db, "DiscErr");
+        const repo = { id: repoId, name_with_owner: "orgDiscErr/repo" };
+
+        const mockGh: GhFn = async <T>(query: string): Promise<T> => {
+          if (query.includes("FetchIssueIds") || query.includes("FetchPrIds")) {
+            return { repository: { [query.includes("FetchIssueIds") ? "issues" : "pullRequests"]: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } } as T;
+          }
+          // No mention of "discussion"; must NOT be silently swallowed.
+          throw new Error("Token disabled by admin");
+        };
+
+        await expect(
+          reconcileTopLevel(db, repo, "orgDiscErr", "repo", mockGh),
+        ).rejects.toThrow(/Token disabled by admin/);
+      });
+    });
+  });
 });

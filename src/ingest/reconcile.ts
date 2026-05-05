@@ -142,7 +142,13 @@ export async function reconcileTopLevel(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/discuss/i.test(msg) || /disabled/i.test(msg) || /not enabled/i.test(msg)) {
+    // Both conditions required: skip only when GitHub explicitly says
+    // discussions are disabled. A bare "disabled" or "not enabled" can
+    // come from rate limits, deprecated tokens, etc., and must not be
+    // silently swallowed.
+    const looksDisabled =
+      /discussion/i.test(msg) && /(disabled|not enabled|not available)/i.test(msg);
+    if (looksDisabled) {
       console.log(`! Discussions not available for ${owner}/${name}, skipping`);
     } else {
       throw err;

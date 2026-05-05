@@ -35,8 +35,9 @@ DEFINE FIELD IF NOT EXISTS description     ON TABLE repo TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS is_private      ON TABLE repo TYPE bool DEFAULT false;
 -- Registration is the CLI's source of truth: a repo is "mirrored" iff registered_at is set.
 DEFINE FIELD IF NOT EXISTS registered_at   ON TABLE repo TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS last_synced_at  ON TABLE repo TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS created_at      ON TABLE repo TYPE datetime;
+DEFINE FIELD IF NOT EXISTS last_synced_at      ON TABLE repo TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS last_reconciled_at  ON TABLE repo TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS created_at          ON TABLE repo TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at      ON TABLE repo TYPE datetime;
 DEFINE FIELD IF NOT EXISTS deleted_at      ON TABLE repo TYPE option<datetime>;
 

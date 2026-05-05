@@ -125,6 +125,7 @@ export async function* fetchIssues(owner: string, name: string, since?: Date): A
     },
   )) {
     const node = IssueNodeSchema.parse(rawNode);
+    if (since && new Date(node.updatedAt) <= since) break;
 
     let author: ParsedUser | null = null;
     if (node.author !== null) {
@@ -166,7 +167,6 @@ export async function* fetchIssues(owner: string, name: string, since?: Date): A
 
     const content_hash = computeContentHash(node.title, node.body);
 
-    if (since && new Date(node.updatedAt) <= since) break;
     yield {
       github_node_id: node.id,
       github_url: node.url,

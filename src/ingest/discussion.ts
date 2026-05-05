@@ -153,6 +153,7 @@ export async function* fetchDiscussions(
     },
   )) {
     const node = DiscussionNodeSchema.parse(rawNode);
+    if (since && new Date(node.updatedAt) <= since) break;
 
     let author: ParsedUser | null = null;
     if (node.author !== null) {
@@ -194,7 +195,6 @@ export async function* fetchDiscussions(
 
     const content_hash = computeContentHash(node.title, node.body);
 
-    if (since && new Date(node.updatedAt) <= since) break;
     yield {
       github_node_id: node.id,
       github_url: node.url,

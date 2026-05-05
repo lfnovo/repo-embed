@@ -304,8 +304,11 @@ async function syncForRepo(
           id: new StringRecordId(repoRef.id),
         });
       } catch (err) {
-        console.error(`✗ Reconciliation failed: ${err}`);
-        process.exit(1);
+        // Throw rather than exit so the --all bulk loop can catch this and
+        // continue with the remaining repos. Single-repo callers convert
+        // the throw back into exit(1) at the top level.
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Reconciliation failed: ${msg}`);
       }
     }
 

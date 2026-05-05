@@ -1,5 +1,5 @@
 import { withDb } from "../clients/surreal.ts";
-import { embed, embedMany } from "../clients/ollama.ts";
+import { embed, embedMany, embedWithFallback } from "../clients/ollama.ts";
 import { embedText } from "../ingest/embed_text.ts";
 import { StringRecordId } from "surrealdb";
 import { config } from "../config.ts";
@@ -101,8 +101,8 @@ export default async function run(args: string[]): Promise<void> {
           // Fall back to per-item embedding to isolate the offender.
           for (let j = 0; j < texts.length; j++) {
             try {
-              const single = await embedMany([texts[j]]);
-              vectors.push(single[0]);
+              const single = await embedWithFallback(texts[j]);
+              vectors.push(single);
             } catch (perItemErr) {
               if (successCount === 0) {
                 consecutiveFailsFromStart++;

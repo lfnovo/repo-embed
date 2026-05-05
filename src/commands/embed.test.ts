@@ -8,6 +8,8 @@ let embedManyCallCount = 0;
 let embedManyImpl: (texts: string[]) => Promise<number[][]> = async (texts) =>
   texts.map(() => new Array(768).fill(0.1));
 let embedProbeImpl: () => Promise<number[]> = async () => new Array(768).fill(0.1);
+let embedWithFallbackImpl: (text: string) => Promise<number[]> = async () =>
+  new Array(768).fill(0.1);
 
 mock.module("../clients/ollama.ts", () => ({
   embed: (_text: string) => embedProbeImpl(),
@@ -15,6 +17,7 @@ mock.module("../clients/ollama.ts", () => ({
     embedManyCallCount++;
     return embedManyImpl(texts);
   },
+  embedWithFallback: (text: string) => embedWithFallbackImpl(text),
 }));
 
 mock.module("../clients/surreal.ts", () => ({
@@ -389,6 +392,9 @@ describe("embed command — per-item failure after first success", () => {
         if (callIndex === 1) return texts.map(() => new Array(768).fill(0.5));
         throw new Error("embedding service error");
       };
+      embedWithFallbackImpl = async () => {
+        throw new Error("embedding service error");
+      };
       embedProbeImpl = async () => new Array(768).fill(0.1);
 
       const { repoId, nwo } = await seedRepoAndOrg(db, "PF");
@@ -452,6 +458,56 @@ describe("embed command — per-item failure after first success", () => {
         "SELECT embedding FROM pull_request WHERE github_node_id = 'PR_PF_1'",
       );
       expect(pr.embedding == null).toBe(true);
+    });
+    testDb = null;
+  });
+});
+
+describe("embed command — per-item oversize recovery", () => {
+  it("embeds item via embedWithFallback when batch fails with context-length error", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      embedManyCallCount = 0;
+      embedManyImpl = async () => {
+        throw new Error("context length exceeded");
+      };
+      embedWithFallbackImpl = async () => new Array(768).fill(0.7);
+      embedProbeImpl = async () => new Array(768).fill(0.1);
+
+      const { repoId, nwo } = await seedRepoAndOrg(db, "OR");
+      const repoRef = new StringRecordId(String(repoId));
+
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_OR_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'Oversize Issue',
+          body: 'body',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_or',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRef },
+      );
+
+      const { exitCode } = await runCapturingExit(() => run([nwo]));
+      expect(exitCode).toBeUndefined();
+
+      const [[issue]] = await db.query<
+        [[{ embedding: unknown; embedded_content_hash: string }]]
+      >(
+        "SELECT embedding, embedded_content_hash FROM issue WHERE github_node_id = 'I_OR_1'",
+      );
+      expect(issue.embedding).not.toBeNull();
+      expect(issue.embedding).not.toBeUndefined();
+      expect(issue.embedded_content_hash).toBe("hash_or");
     });
     testDb = null;
   });

@@ -409,6 +409,82 @@ describe("sync command — --full flag", () => {
   });
 });
 
+describe("sync command — --all flag", () => {
+  it("runs per-repo pipeline for all registered repos and prints ==> headers", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      ghCallCount = 0;
+
+      const [orgRows] = await db.query<[Array<{ id: unknown }>]>(
+        `CREATE org CONTENT {
+          github_node_id: 'ORG_GH_ALL',
+          github_url: 'https://github.com/lfnovo',
+          login: 'lfnovo',
+          name: 'Luis',
+          kind: 'User',
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE
+        }`,
+      );
+      const orgId = orgRows[0].id;
+
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_ALL_A',
+          github_url: 'https://github.com/lfnovo/repo-a',
+          name: 'repo-a',
+          name_with_owner: 'lfnovo/repo-a',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now()
+        }`,
+        { owner: orgId },
+      );
+
+      await db.query(
+        `CREATE repo CONTENT {
+          github_node_id: 'REPO_ALL_B',
+          github_url: 'https://github.com/lfnovo/repo-b',
+          name: 'repo-b',
+          name_with_owner: 'lfnovo/repo-b',
+          description: NONE,
+          is_private: false,
+          owner: $owner,
+          created_at: time::now(),
+          updated_at: time::now(),
+          registered_at: time::now()
+        }`,
+        { owner: orgId },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(['--all']); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l === '==> lfnovo/repo-a')).toBe(true);
+      expect(logs.some(l => l === '==> lfnovo/repo-b')).toBe(true);
+
+      const [[repoA]] = await db.query<[[{ last_synced_at: unknown }]]>(
+        "SELECT last_synced_at FROM repo WHERE name_with_owner = 'lfnovo/repo-a'",
+      );
+      expect(repoA.last_synced_at).not.toBeNull();
+      expect(repoA.last_synced_at).not.toBeUndefined();
+
+      const [[repoB]] = await db.query<[[{ last_synced_at: unknown }]]>(
+        "SELECT last_synced_at FROM repo WHERE name_with_owner = 'lfnovo/repo-b'",
+      );
+      expect(repoB.last_synced_at).not.toBeNull();
+      expect(repoB.last_synced_at).not.toBeUndefined();
+    });
+    testDb = null;
+  });
+});
+
 describe("sync command — idempotency", () => {
   it("two consecutive syncs produce no duplicate records and advance last_synced_at", async () => {
     await withTestDb(async (db) => {

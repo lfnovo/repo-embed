@@ -384,9 +384,53 @@ function renderHuman(snapshot: Snapshot, nwo: string): void {
   }
 }
 
+type RepoListRow = {
+  id: unknown;
+  name_with_owner: string;
+  registered_at: unknown;
+  last_synced_at: unknown;
+};
+
 export default async function run(args: string[]): Promise<void> {
+  const allFlag = args.includes("--all");
   const nwo = args.find((a) => !a.startsWith("--"));
   const json = args.includes("--json");
+
+  if (allFlag) {
+    let repos: RepoListRow[] = [];
+    await withDb(async (db) => {
+      const [rows] = await db.query<[RepoListRow[]]>(
+        "SELECT id, name_with_owner, registered_at, last_synced_at FROM repo WHERE registered_at IS NOT NONE ORDER BY name_with_owner",
+      );
+      repos = rows;
+    });
+
+    if (json) {
+      const snapshots: (Snapshot & { name_with_owner: string })[] = [];
+      for (const repo of repos) {
+        const [owner, name] = repo.name_with_owner.split("/");
+        await withDb(async (db) => {
+          const snapshot = await buildSnapshot(db, repo, owner, name);
+          snapshots.push({ ...snapshot, name_with_owner: repo.name_with_owner });
+        });
+      }
+      console.log(JSON.stringify(snapshots));
+      return;
+    }
+
+    let first = true;
+    for (const repo of repos) {
+      if (!first) console.log("");
+      first = false;
+      console.log(`==> ${repo.name_with_owner}`);
+      const [owner, name] = repo.name_with_owner.split("/");
+      await withDb(async (db) => {
+        const snapshot = await buildSnapshot(db, repo, owner, name);
+        renderHuman(snapshot, repo.name_with_owner);
+      });
+    }
+    return;
+  }
 
   if (!nwo || !nwo.includes("/")) {
     console.error("✗ Usage: tool inspect <owner/name> [--json]");
@@ -396,9 +440,7 @@ export default async function run(args: string[]): Promise<void> {
   const [owner, name] = nwo.split("/");
 
   await withDb(async (db) => {
-    const [repoRows] = await db.query<
-      [Array<{ id: unknown; name_with_owner: string; registered_at: unknown; last_synced_at: unknown }>]
-    >(
+    const [repoRows] = await db.query<[RepoListRow[]]>(
       "SELECT id, name_with_owner, registered_at, last_synced_at FROM repo WHERE name_with_owner = $nwo AND registered_at != NONE",
       { nwo },
     );

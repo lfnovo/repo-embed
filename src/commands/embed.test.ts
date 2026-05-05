@@ -5,6 +5,7 @@ import { withTestDb } from "../test_utils/with_test_db.ts";
 
 let testDb: Surreal | null = null;
 let embedManyCallCount = 0;
+let embedProbeCallCount = 0;
 let embedManyImpl: (texts: string[]) => Promise<number[][]> = async (texts) =>
   texts.map(() => new Array(768).fill(0.1));
 let embedProbeImpl: () => Promise<number[]> = async () => new Array(768).fill(0.1);
@@ -12,7 +13,7 @@ let embedWithFallbackImpl: (text: string) => Promise<number[]> = async () =>
   new Array(768).fill(0.1);
 
 mock.module("../clients/ollama.ts", () => ({
-  embed: (_text: string) => embedProbeImpl(),
+  embed: (_text: string) => { embedProbeCallCount++; return embedProbeImpl(); },
   embedMany: (texts: string[]) => {
     embedManyCallCount++;
     return embedManyImpl(texts);
@@ -508,6 +509,89 @@ describe("embed command — per-item oversize recovery", () => {
       expect(issue.embedding).not.toBeNull();
       expect(issue.embedding).not.toBeUndefined();
       expect(issue.embedded_content_hash).toBe("hash_or");
+    });
+    testDb = null;
+  });
+});
+
+describe("embed command — --all flag", () => {
+  it("calls per-repo pipeline for all registered repos and probes Ollama exactly once", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      embedManyCallCount = 0;
+      embedProbeCallCount = 0;
+      embedManyImpl = async (texts) => texts.map(() => new Array(768).fill(0.5));
+      embedProbeImpl = async () => new Array(768).fill(0.1);
+
+      const { repoId: repoIdA, nwo: nwoA } = await seedRepoAndOrg(db, "AL1");
+      const { repoId: repoIdB, nwo: nwoB } = await seedRepoAndOrg(db, "AL2");
+      const repoRefA = new StringRecordId(String(repoIdA));
+      const repoRefB = new StringRecordId(String(repoIdB));
+
+      // Seed one issue per repo so embedMany is called for each
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_AL1_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'Issue A',
+          body: 'Body A',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_al1',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRefA },
+      );
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_AL2_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'Issue B',
+          body: 'Body B',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_al2',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRefB },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(['--all']); } finally { console.log = origLog; }
+
+      // Probe runs exactly once
+      expect(embedProbeCallCount).toBe(1);
+
+      // Both repos processed (headers logged)
+      expect(logs.some(l => l === `==> ${nwoA}`)).toBe(true);
+      expect(logs.some(l => l === `==> ${nwoB}`)).toBe(true);
+
+      // Both issues embedded
+      const [[issueA]] = await db.query<[[{ embedding: unknown }]]>(
+        "SELECT embedding FROM issue WHERE github_node_id = 'I_AL1_1'",
+      );
+      expect(issueA.embedding).not.toBeNull();
+      expect(issueA.embedding).not.toBeUndefined();
+
+      const [[issueB]] = await db.query<[[{ embedding: unknown }]]>(
+        "SELECT embedding FROM issue WHERE github_node_id = 'I_AL2_1'",
+      );
+      expect(issueB.embedding).not.toBeNull();
+      expect(issueB.embedding).not.toBeUndefined();
     });
     testDb = null;
   });

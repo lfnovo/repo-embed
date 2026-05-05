@@ -286,3 +286,73 @@ describe("inspect command", () => {
     });
   });
 });
+
+async function seedSecondRepo(db: Surreal): Promise<void> {
+  await db.query(`
+    CREATE org:inspectorg2 CONTENT {
+      github_node_id: 'U_inspect2',
+      github_url: 'https://github.com/testorg2',
+      login: 'testorg2',
+      name: 'Test Org 2',
+      kind: 'Organization',
+      created_at: time::now(),
+      updated_at: time::now(),
+      deleted_at: NONE
+    }
+  `);
+  await db.query(`
+    CREATE repo:inspectrepo2 CONTENT {
+      github_node_id: 'R_inspect2',
+      github_url: 'https://github.com/testorg2/testrepo2',
+      owner: org:inspectorg2,
+      name: 'testrepo2',
+      name_with_owner: 'testorg2/testrepo2',
+      description: NONE,
+      is_private: false,
+      registered_at: time::now(),
+      last_synced_at: NONE,
+      created_at: time::now(),
+      updated_at: time::now()
+    }
+  `);
+}
+
+describe("inspect command — --all flag", () => {
+  it("human mode outputs ==> headers for both repos separated by a blank line", async () => {
+    await withTestDb(async (db) => {
+      _testDb = db;
+      await seedInspect(db);
+      await seedSecondRepo(db);
+
+      const output = await captureLog(() => run(["--all"]));
+
+      expect(output).toContain("==> testorg/testrepo");
+      expect(output).toContain("==> testorg2/testrepo2");
+
+      // Blank line must appear between the two ==> headers
+      const lines = output.split("\n");
+      const idx1 = lines.findIndex((l) => l === "==> testorg/testrepo");
+      const idx2 = lines.findIndex((l) => l === "==> testorg2/testrepo2");
+      expect(idx1).toBeGreaterThanOrEqual(0);
+      expect(idx2).toBeGreaterThan(idx1);
+      const between = lines.slice(idx1 + 1, idx2);
+      expect(between.some((l) => l === "")).toBe(true);
+    });
+  });
+
+  it("--json mode outputs a JSON array of length 2 with name_with_owner on each element", async () => {
+    await withTestDb(async (db) => {
+      _testDb = db;
+      await seedInspect(db);
+      await seedSecondRepo(db);
+
+      const output = await captureLog(() => run(["--all", "--json"]));
+
+      const arr = JSON.parse(output) as Array<{ name_with_owner: string }>;
+      expect(Array.isArray(arr)).toBe(true);
+      expect(arr.length).toBe(2);
+      const nwos = arr.map((r) => r.name_with_owner).sort();
+      expect(nwos).toEqual(["testorg/testrepo", "testorg2/testrepo2"]);
+    });
+  });
+});

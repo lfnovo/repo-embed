@@ -1,6 +1,7 @@
 import { gh } from "../clients/github.ts";
 import { withDb } from "../clients/surreal.ts";
 import { StringRecordId } from "surrealdb";
+import type { Surreal } from "surrealdb";
 import { createContent, updateSet } from "../clients/surreal_helpers.ts";
 import { fetchLabelsCatalog, persistLabelCatalog } from "../ingest/labels.ts";
 import { fetchIssues, persistIssue } from "../ingest/issue.ts";
@@ -82,19 +83,14 @@ function fmtTimestamp(d: Date): string {
   return d.toISOString();
 }
 
-export default async function run(args: string[]): Promise<void> {
-  const fullFlag = args.includes('--full');
-  const reconcileFlag = args.includes('--reconcile');
-  const repoArg = args.find(a => !a.startsWith('--'));
-  const input = repoArg;
-  if (!input || !/^[^/]+\/[^/]+$/.test(input)) {
-    console.error("✗ Usage: tool sync <owner/name>");
-    process.exit(1);
-  }
-
-  const [owner, name] = input.split("/");
-
-  await withDb(async (db) => {
+async function syncForRepo(
+  db: Surreal,
+  owner: string,
+  name: string,
+  input: string,
+  fullFlag: boolean,
+  reconcileFlag: boolean,
+): Promise<void> {
     // Captured at sync start so the watermark can never advance past
     // updates that happened during this run; we'd miss them next time.
     const syncStartedAt = new Date();
@@ -320,5 +316,40 @@ export default async function run(args: string[]): Promise<void> {
     });
     const ts = fmtTimestamp(syncStartedAt);
     console.log(`✓ Sync complete: ${repoRef.name_with_owner} @ ${ts}`);
+}
+
+export default async function run(args: string[]): Promise<void> {
+  const allFlag = args.includes('--all');
+  const fullFlag = args.includes('--full');
+  const reconcileFlag = args.includes('--reconcile');
+
+  if (allFlag) {
+    let repos: Array<{ name_with_owner: string }> = [];
+    await withDb(async (db) => {
+      const [rows] = await db.query<[Array<{ name_with_owner: string }>]>(
+        "SELECT name_with_owner FROM repo WHERE registered_at IS NOT NONE ORDER BY name_with_owner",
+      );
+      repos = rows;
+    });
+
+    for (const repo of repos) {
+      const [owner, name] = repo.name_with_owner.split("/");
+      console.log(`==> ${repo.name_with_owner}`);
+      await withDb(async (db) => {
+        await syncForRepo(db, owner, name, repo.name_with_owner, fullFlag, reconcileFlag);
+      });
+    }
+    return;
+  }
+
+  const input = args.find(a => !a.startsWith('--'));
+  if (!input || !/^[^/]+\/[^/]+$/.test(input)) {
+    console.error("✗ Usage: tool sync <owner/name>");
+    process.exit(1);
+  }
+
+  const [owner, name] = input.split("/");
+  await withDb(async (db) => {
+    await syncForRepo(db, owner, name, input, fullFlag, reconcileFlag);
   });
 }

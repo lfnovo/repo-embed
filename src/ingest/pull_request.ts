@@ -117,7 +117,7 @@ const PULL_REQUESTS_QUERY = `
     repository(owner: $owner, name: $name) {
       pullRequests(
         states: [OPEN, CLOSED, MERGED],
-        orderBy: { field: UPDATED_AT, direction: ASC },
+        orderBy: { field: UPDATED_AT, direction: DESC },
         first: 50,
         after: $cursor
       ) {
@@ -178,6 +178,7 @@ const PR_COMMITS_QUERY = `
 export async function* fetchPullRequests(
   owner: string,
   name: string,
+  since?: Date,
 ): AsyncGenerator<ParsedPullRequest> {
   for await (const rawNode of paginate(
     PULL_REQUESTS_QUERY,
@@ -195,6 +196,7 @@ export async function* fetchPullRequests(
     },
   )) {
     const node = PullRequestNodeSchema.parse(rawNode);
+    if (since && new Date(node.updatedAt) <= since) break;
 
     let author: ParsedUser | null = null;
     if (node.author !== null) {

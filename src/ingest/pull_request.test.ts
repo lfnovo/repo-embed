@@ -13,9 +13,11 @@ mock.module("../clients/github.ts", () => ({
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
     },
   ) {
-    for (const page of [page1, page2]) {
+    // Pages reversed and nodes reversed to simulate the DESC ordering
+    // the production query requests (newest first across pages).
+    for (const page of [page2, page1]) {
       const connection = selectConnection(page);
-      for (const node of connection.nodes) {
+      for (const node of [...connection.nodes].reverse()) {
         yield node;
       }
     }
@@ -299,6 +301,30 @@ describe("persistPullRequest MERGED state", () => {
       expect(prRows[0].state).toBe("MERGED");
       expect(prRows[0].merged_at_set).toBe(true);
     });
+  });
+});
+
+// ─── 7. fetchPullRequests — since filter ─────────────────────────────────────
+
+describe("fetchPullRequests — since filter", () => {
+  it("yields all items when since predates all fixture items", async () => {
+    const items: ParsedPullRequest[] = [];
+    for await (const pr of fetchPullRequests("test", "repo", new Date("2020-01-01"))) {
+      items.push(pr);
+    }
+    // All fixture items have updatedAt in 2026; none trigger early-break
+    expect(items.length).toBe(3);
+  });
+
+  it("yields newest-first and early-breaks before items at or older than since", async () => {
+    const items: ParsedPullRequest[] = [];
+    // Fixture (DESC): PR_003 (Jan 10) → PR_002 (Jan 5) → PR_001 (Jan 2).
+    // since = Jan 4 cuts between PR_002 and PR_001 → expect [PR_003, PR_002]
+    // and the loop must terminate before yielding PR_001.
+    for await (const pr of fetchPullRequests("test", "repo", new Date("2026-01-04T00:00:00Z"))) {
+      items.push(pr);
+    }
+    expect(items.map((p) => p.github_node_id)).toEqual(["PR_003", "PR_002"]);
   });
 });
 

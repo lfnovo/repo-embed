@@ -168,6 +168,7 @@ export async function* fetchCommentsForIssue(
   owner: string,
   name: string,
   issueNumber: number,
+  since?: Date,
 ): AsyncGenerator<ParsedComment> {
   let parentNodeId = "";
   for await (const rawNode of paginate(
@@ -209,6 +210,7 @@ export async function* fetchCommentsForPullRequest(
   owner: string,
   name: string,
   prNumber: number,
+  since?: Date,
 ): AsyncGenerator<ParsedComment> {
   let parentNodeId = "";
   for await (const rawNode of paginate(
@@ -250,6 +252,7 @@ export async function* fetchCommentsForDiscussion(
   owner: string,
   name: string,
   discussionNumber: number,
+  since?: Date,
 ): AsyncGenerator<ParsedComment> {
   let parentNodeId = "";
   for await (const rawNode of paginate(

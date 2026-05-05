@@ -82,7 +82,7 @@ const DISCUSSIONS_PROBE_QUERY = `
 const DISCUSSIONS_QUERY = `
   query FetchDiscussions($owner: String!, $name: String!, $cursor: String) {
     repository(owner: $owner, name: $name) {
-      discussions(first: 50, after: $cursor, orderBy: {field: UPDATED_AT, direction: ASC}) {
+      discussions(first: 50, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id url number title body closedAt createdAt updatedAt
@@ -129,6 +129,7 @@ export function computeContentHash(title: string, rawBody: string | null): strin
 export async function* fetchDiscussions(
   owner: string,
   name: string,
+  since?: Date,
 ): AsyncGenerator<ParsedDiscussion> {
   const probeData = await gh<{ repository: { hasDiscussionsEnabled: boolean } }>(
     DISCUSSIONS_PROBE_QUERY,
@@ -152,6 +153,7 @@ export async function* fetchDiscussions(
     },
   )) {
     const node = DiscussionNodeSchema.parse(rawNode);
+    if (since && new Date(node.updatedAt) <= since) break;
 
     let author: ParsedUser | null = null;
     if (node.author !== null) {

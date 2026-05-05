@@ -67,7 +67,7 @@ const IssueNodeSchema = z.object({
 const ISSUES_QUERY = `
   query FetchIssues($owner: String!, $name: String!, $cursor: String) {
     repository(owner: $owner, name: $name) {
-      issues(first: 100, after: $cursor, orderBy: {field: UPDATED_AT, direction: ASC}) {
+      issues(first: 100, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id url number title body state stateReason closedAt createdAt updatedAt
@@ -108,7 +108,7 @@ export function computeContentHash(title: string, rawBody: string | null): strin
     .digest("hex");
 }
 
-export async function* fetchIssues(owner: string, name: string): AsyncGenerator<ParsedIssue> {
+export async function* fetchIssues(owner: string, name: string, since?: Date): AsyncGenerator<ParsedIssue> {
   for await (const rawNode of paginate(
     ISSUES_QUERY,
     { owner, name },
@@ -125,6 +125,7 @@ export async function* fetchIssues(owner: string, name: string): AsyncGenerator<
     },
   )) {
     const node = IssueNodeSchema.parse(rawNode);
+    if (since && new Date(node.updatedAt) <= since) break;
 
     let author: ParsedUser | null = null;
     if (node.author !== null) {

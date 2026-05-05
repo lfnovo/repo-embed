@@ -3,7 +3,7 @@ export default function run(): void {
   console.log("");
   console.log("Commands:");
   console.log("  add      Register a GitHub repo for mirroring (tool add owner/name)");
-  console.log("  sync     Sync a registered repo (tool sync owner/name)");
+  console.log("  sync     Sync a registered repo (tool sync owner/name [--full])");
   console.log("  embed    Embed pending content for a synced repo (tool embed owner/name)");
   console.log("  list     List registered repos (tool list [--json])");
   console.log("  remove   Unregister a repo (tool remove owner/name [--purge] [--yes])");

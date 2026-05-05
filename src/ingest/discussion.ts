@@ -194,6 +194,7 @@ export async function* fetchDiscussions(
 
     const content_hash = computeContentHash(node.title, node.body);
 
+    if (since && new Date(node.updatedAt) <= since) break;
     yield {
       github_node_id: node.id,
       github_url: node.url,
@@ -209,7 +210,6 @@ export async function* fetchDiscussions(
       author,
       labels,
     };
-    if (since && new Date(node.updatedAt) < since) break;
   }
 }
 

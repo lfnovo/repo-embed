@@ -13,9 +13,11 @@ mock.module("../clients/github.ts", () => ({
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
     },
   ) {
-    for (const page of [page1, page2]) {
+    // Pages reversed and nodes reversed to simulate the DESC ordering
+    // the production query requests (newest first across pages).
+    for (const page of [page2, page1]) {
       const connection = selectConnection(page);
-      for (const node of connection.nodes) {
+      for (const node of [...connection.nodes].reverse()) {
         yield node;
       }
     }
@@ -251,13 +253,14 @@ describe("fetchIssues — since filter", () => {
     expect(items.length).toBe(3);
   });
 
-  it("early-breaks after first item when since falls within fixture range", async () => {
+  it("yields newest-first and early-breaks before items at or older than since", async () => {
     const items: ParsedIssue[] = [];
-    // I_001 updatedAt is 2026-01-02T00:00:00Z; since is noon that day → break fires after I_001
-    for await (const issue of fetchIssues("test", "repo", new Date("2026-01-02T12:00:00Z"))) {
+    // Fixture (DESC): I_003 (Jan 5) → I_002 (Jan 3) → I_001 (Jan 2).
+    // since = Jan 4 cuts between I_003 and I_002 → expect [I_003] and the
+    // loop must terminate before yielding I_002.
+    for await (const issue of fetchIssues("test", "repo", new Date("2026-01-04T00:00:00Z"))) {
       items.push(issue);
     }
-    expect(items.length).toBe(1);
-    expect(items[0].github_node_id).toBe("I_001");
+    expect(items.map((i) => i.github_node_id)).toEqual(["I_003"]);
   });
 });

@@ -262,6 +262,7 @@ export async function* fetchPullRequests(
 
     const content_hash = computeContentHash(node.title, node.body);
 
+    if (since && new Date(node.updatedAt) <= since) break;
     yield {
       github_node_id: node.id,
       github_url: node.url,
@@ -279,7 +280,6 @@ export async function* fetchPullRequests(
       commits,
       closing_issue_node_ids,
     };
-    if (since && new Date(node.updatedAt) < since) break;
   }
 }
 

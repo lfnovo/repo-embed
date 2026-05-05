@@ -93,6 +93,10 @@ export default async function run(args: string[]): Promise<void> {
   const [owner, name] = input.split("/");
 
   await withDb(async (db) => {
+    // Captured at sync start so the watermark can never advance past
+    // updates that happened during this run; we'd miss them next time.
+    const syncStartedAt = new Date();
+
     // 1. Load repo node
     const [repoRows] = await db.query<
       [Array<{ id: unknown; name_with_owner: string; registered_at: unknown; last_synced_at: unknown }>]
@@ -294,11 +298,12 @@ export default async function run(args: string[]): Promise<void> {
     const { materialized: M } = await materializeDanglingReferences(db, repoRef);
     console.log(`✓ Dangling materialized: ${M}`);
 
-    // 11. Set last_synced_at
-    await db.query("UPDATE $id SET last_synced_at = time::now()", {
+    // 11. Set last_synced_at to the timestamp captured at sync start
+    await db.query("UPDATE $id SET last_synced_at = $syncStartedAt", {
       id: new StringRecordId(repoRef.id),
+      syncStartedAt,
     });
-    const ts = fmtTimestamp(new Date());
+    const ts = fmtTimestamp(syncStartedAt);
     console.log(`✓ Sync complete: ${repoRef.name_with_owner} @ ${ts}`);
   });
 }

@@ -18,6 +18,7 @@ import {
   tombstoneMissingComments,
 } from "../ingest/comment.ts";
 import { extractAndLinkCrossRefs, materializeDanglingReferences } from "../ingest/crossrefs.ts";
+import { reconcileTopLevel } from "../ingest/reconcile.ts";
 import type { RepoRef } from "../ingest/types.ts";
 
 type GitHubOwner = {
@@ -83,6 +84,7 @@ function fmtTimestamp(d: Date): string {
 
 export default async function run(args: string[]): Promise<void> {
   const fullFlag = args.includes('--full');
+  const reconcileFlag = args.includes('--reconcile');
   const repoArg = args.find(a => !a.startsWith('--'));
   const input = repoArg;
   if (!input || !/^[^/]+\/[^/]+$/.test(input)) {
@@ -298,7 +300,20 @@ export default async function run(args: string[]): Promise<void> {
     const { materialized: M } = await materializeDanglingReferences(db, repoRef);
     console.log(`✓ Dangling materialized: ${M}`);
 
-    // 11. Set last_synced_at to the timestamp captured at sync start
+    // 11. Reconcile top-level items against GitHub (optional)
+    if (reconcileFlag) {
+      try {
+        await reconcileTopLevel(db, repoRef, owner, name, gh);
+        await db.query("UPDATE $id SET last_reconciled_at = time::now()", {
+          id: new StringRecordId(repoRef.id),
+        });
+      } catch (err) {
+        console.error(`✗ Reconciliation failed: ${err}`);
+        process.exit(1);
+      }
+    }
+
+    // 12. Set last_synced_at to the timestamp captured at sync start
     await db.query("UPDATE $id SET last_synced_at = $syncStartedAt", {
       id: new StringRecordId(repoRef.id),
       syncStartedAt,

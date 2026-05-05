@@ -83,7 +83,8 @@ async function embedForRepo(db: Surreal, nwo: string): Promise<void> {
       let vectors: (number[] | null)[] = [];
       try {
         vectors = await embedMany(texts);
-      } catch {
+      } catch (batchErr) {
+        console.error(`! Batch embed failed (${batch.length} items), retrying per-item: ${batchErr}`);
         // Fall back to per-item embedding to isolate the offender.
         for (let j = 0; j < texts.length; j++) {
           try {
@@ -218,7 +219,8 @@ export default async function run(args: string[]): Promise<void> {
 
     try {
       await embedForRepo(db, input);
-    } catch {
+    } catch (err) {
+      console.error(`✗ ${(err as Error).message}`);
       process.exit(1);
     }
   });

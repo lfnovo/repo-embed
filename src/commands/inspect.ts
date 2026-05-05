@@ -406,7 +406,11 @@ export default async function run(args: string[]): Promise<void> {
     });
 
     if (repos.length === 0) {
-      console.log("(no repos registered — use `tool add` first)");
+      if (json) {
+        console.log("[]");
+      } else {
+        console.log("(no repos registered — use `tool add` first)");
+      }
       return;
     }
 

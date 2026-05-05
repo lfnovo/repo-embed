@@ -305,8 +305,9 @@ async function syncForRepo(
         });
       } catch (err) {
         // Throw rather than exit so the --all bulk loop can catch this and
-        // continue with the remaining repos. Single-repo callers convert
-        // the throw back into exit(1) at the top level.
+        // continue with the remaining repos. Single-repo callers don't
+        // wrap this throw — Bun's default unhandled-rejection handler
+        // surfaces the message and exits 1.
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(`Reconciliation failed: ${msg}`);
       }

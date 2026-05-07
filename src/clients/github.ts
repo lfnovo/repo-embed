@@ -12,8 +12,28 @@ function getGh(): typeof graphql {
   return _gh;
 }
 
-export function gh<T>(query: string, params?: RequestParameters): Promise<T> {
-  return getGh()<T>(query, params);
+export async function gh<T>(query: string, params?: RequestParameters): Promise<T> {
+  try {
+    return await getGh()<T>(query, params);
+  } catch (err: unknown) {
+    if (
+      err !== null &&
+      typeof err === "object" &&
+      "status" in err &&
+      ((err as { status: unknown }).status === 401 ||
+        (err as { status: unknown }).status === 403)
+    ) {
+      const owner = typeof params?.owner === "string" ? params.owner : null;
+      const name = typeof params?.name === "string" ? params.name : null;
+      const repo = owner && name ? ` for ${owner}/${name}` : "";
+      const originalMessage = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `✗ GitHub access denied${repo}: ${originalMessage}\n  Hint: token may be expired, missing required scope, or not authorized\n        for this org. See README "Private repos" for required scopes.`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
 }
 
 /**

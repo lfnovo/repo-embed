@@ -1,5 +1,32 @@
 `github-embedder-surrealdb` is a read-only GitHub knowledge-base mirror stored as a graph in SurrealDB and exposed as a Bun CLI. It mirrors discussion artifacts of one or more GitHub repositories — issues, PRs, discussions, comments, and PR-referenced commits — so an AI agent can semantically retrieve project memory about what has already been discussed, decided, or attempted.
 
+## Configuration
+
+### Private repos
+
+The mirror works with private repositories out of the box — `tool add`, `tool sync`, and `tool embed` make no public/private distinction. The `is_private` field is captured and stored automatically.
+
+To access private repos, the `GITHUB_TOKEN` must have the right permissions:
+
+**Classic PAT** — needs the `repo` scope.
+
+**Fine-grained PAT** — needs all of the following repository permissions:
+- `contents:read`
+- `issues:read`
+- `pull-requests:read`
+- `discussions:read`
+- `metadata:read`
+
+See GitHub's docs for guidance:
+- [Managing personal access tokens (classic)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+- [Creating a fine-grained personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)
+
+**Organization-owned repos** — an org admin may need to authorize (approve) the PAT for the organization before it can access org repos.
+
+**SSO-protected repos** — if the org enforces SAML SSO, the PAT must also have SSO authorized for the relevant organization.
+
+**Single-token constraint** — the same token must cover every repository registered in this install. If you need different tokens for repos under different accounts (e.g., a personal repo and a different org's repo), that is tracked as a separate future enhancement: [#42 Per-repo tokens for multi-account / fine-grained PAT installs](https://github.com/lfnovo/repo-embed/issues/42).
+
 ## Testing
 
 ### Running tests

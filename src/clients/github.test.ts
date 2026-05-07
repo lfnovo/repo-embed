@@ -128,4 +128,20 @@ describe("gh() 401/403 diagnostic wrapping", () => {
     };
     await expect(gh("query { }")).rejects.toBe(graphqlErr);
   });
+
+  it("re-throws 403 rate-limit errors unchanged (no scope hint)", async () => {
+    const rateErr = makeHttpError(403, "API rate limit exceeded for user ID 1");
+    mockImpl = async () => {
+      throw rateErr;
+    };
+    await expect(gh("query { }")).rejects.toBe(rateErr);
+  });
+
+  it("re-throws 403 secondary rate-limit (abuse) errors unchanged", async () => {
+    const abuseErr = makeHttpError(403, "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.");
+    mockImpl = async () => {
+      throw abuseErr;
+    };
+    await expect(gh("query { }")).rejects.toBe(abuseErr);
+  });
 });

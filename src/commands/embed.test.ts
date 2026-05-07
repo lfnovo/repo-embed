@@ -5,6 +5,7 @@ import { withTestDb } from "../test_utils/with_test_db.ts";
 
 let testDb: Surreal | null = null;
 let embedManyCallCount = 0;
+let embedProbeCallCount = 0;
 let embedManyImpl: (texts: string[]) => Promise<number[][]> = async (texts) =>
   texts.map(() => new Array(768).fill(0.1));
 let embedProbeImpl: () => Promise<number[]> = async () => new Array(768).fill(0.1);
@@ -12,7 +13,7 @@ let embedWithFallbackImpl: (text: string) => Promise<number[]> = async () =>
   new Array(768).fill(0.1);
 
 mock.module("../clients/ollama.ts", () => ({
-  embed: (_text: string) => embedProbeImpl(),
+  embed: (_text: string) => { embedProbeCallCount++; return embedProbeImpl(); },
   embedMany: (texts: string[]) => {
     embedManyCallCount++;
     return embedManyImpl(texts);
@@ -508,6 +509,223 @@ describe("embed command — per-item oversize recovery", () => {
       expect(issue.embedding).not.toBeNull();
       expect(issue.embedding).not.toBeUndefined();
       expect(issue.embedded_content_hash).toBe("hash_or");
+    });
+    testDb = null;
+  });
+});
+
+describe("embed command — --all flag", () => {
+  it("calls per-repo pipeline for all registered repos and probes Ollama exactly once", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      embedManyCallCount = 0;
+      embedProbeCallCount = 0;
+      embedManyImpl = async (texts) => texts.map(() => new Array(768).fill(0.5));
+      embedProbeImpl = async () => new Array(768).fill(0.1);
+
+      const { repoId: repoIdA, nwo: nwoA } = await seedRepoAndOrg(db, "AL1");
+      const { repoId: repoIdB, nwo: nwoB } = await seedRepoAndOrg(db, "AL2");
+      const repoRefA = new StringRecordId(String(repoIdA));
+      const repoRefB = new StringRecordId(String(repoIdB));
+
+      // Seed one issue per repo so embedMany is called for each
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_AL1_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'Issue A',
+          body: 'Body A',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_al1',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRefA },
+      );
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_AL2_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'Issue B',
+          body: 'Body B',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_al2',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRefB },
+      );
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(['--all']); } finally { console.log = origLog; }
+
+      // Probe runs exactly once
+      expect(embedProbeCallCount).toBe(1);
+
+      // Both repos processed (headers logged)
+      expect(logs.some(l => l === `==> ${nwoA}`)).toBe(true);
+      expect(logs.some(l => l === `==> ${nwoB}`)).toBe(true);
+
+      // Both issues embedded
+      const [[issueA]] = await db.query<[[{ embedding: unknown }]]>(
+        "SELECT embedding FROM issue WHERE github_node_id = 'I_AL1_1'",
+      );
+      expect(issueA.embedding).not.toBeNull();
+      expect(issueA.embedding).not.toBeUndefined();
+
+      const [[issueB]] = await db.query<[[{ embedding: unknown }]]>(
+        "SELECT embedding FROM issue WHERE github_node_id = 'I_AL2_1'",
+      );
+      expect(issueB.embedding).not.toBeNull();
+      expect(issueB.embedding).not.toBeUndefined();
+    });
+    testDb = null;
+  });
+});
+
+describe("embed command — --all empty repos", () => {
+  it("prints friendly message and exits 0 when no repos are registered", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      embedProbeCallCount = 0;
+      embedManyCallCount = 0;
+      embedProbeImpl = async () => new Array(768).fill(0.1);
+
+      const logs: string[] = [];
+      const origLog = console.log;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      try { await run(['--all']); } finally { console.log = origLog; }
+
+      expect(logs.some(l => l.includes("no repos registered"))).toBe(true);
+      expect(embedManyCallCount).toBe(0);
+    });
+    testDb = null;
+  });
+});
+
+describe("embed command — --all failure isolation", () => {
+  it("catches one failing repo, logs ✗, continues, prints summary, exits 1", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      embedManyCallCount = 0;
+      embedProbeCallCount = 0;
+      embedProbeImpl = async () => new Array(768).fill(0.1);
+
+      // FAIL repo comes before OK alphabetically
+      const { repoId: repoIdFail, nwo: nwoFail } = await seedRepoAndOrg(db, "AFAIL");
+      const { repoId: repoIdOk, nwo: nwoOk } = await seedRepoAndOrg(db, "AOK");
+      const repoRefFail = new StringRecordId(String(repoIdFail));
+      const repoRefOk = new StringRecordId(String(repoIdOk));
+
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_AFAIL_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'Fail Issue',
+          body: 'body',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_fail',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRefFail },
+      );
+      await db.query(
+        `CREATE issue CONTENT {
+          github_node_id: 'I_AOK_1',
+          github_url: 'u',
+          repo: $repo,
+          number: 1,
+          title: 'OK Issue',
+          body: 'body',
+          state: 'OPEN',
+          author: NONE,
+          created_at: time::now(),
+          updated_at: time::now(),
+          deleted_at: NONE,
+          content_hash: 'hash_ok',
+          embedding: NONE,
+          embedded_content_hash: NONE
+        }`,
+        { repo: repoRefOk },
+      );
+
+      // AFAIL repo comes first; make its embedMany call fail
+      let callIdx = 0;
+      embedManyImpl = async (texts) => {
+        callIdx++;
+        if (callIdx === 1) throw new Error("simulated embed failure");
+        return texts.map(() => new Array(768).fill(0.5));
+      };
+      embedWithFallbackImpl = async () => { throw new Error("fallback also fails"); };
+
+      const logs: string[] = [];
+      const errors: string[] = [];
+      const origLog = console.log;
+      const origErr = console.error;
+      console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+      console.error = (...args: unknown[]) => { errors.push(args.map(String).join(' ')); };
+
+      let result: { exitCode: number | undefined };
+      try {
+        result = await runCapturingExit(() => run(['--all']));
+      } finally {
+        console.log = origLog;
+        console.error = origErr;
+        embedManyImpl = async (texts) => texts.map(() => new Array(768).fill(0.5));
+        embedWithFallbackImpl = async () => new Array(768).fill(0.1);
+      }
+
+      expect(result!.exitCode).toBe(1);
+      expect(errors.some(l => l.includes('✗') && l.includes(nwoFail))).toBe(true);
+      expect(logs.some(l => l === `==> ${nwoOk}`)).toBe(true);
+      expect(logs.some(l => l.includes('1/2') && l.includes('1 failed'))).toBe(true);
+
+      // OK repo's issue should be embedded
+      const [[issueOk]] = await db.query<[[{ embedding: unknown }]]>(
+        "SELECT embedding FROM issue WHERE github_node_id = 'I_AOK_1'",
+      );
+      expect(issueOk.embedding).not.toBeNull();
+      expect(issueOk.embedding).not.toBeUndefined();
+    });
+    testDb = null;
+  });
+});
+
+describe("embed command — --all Ollama probe failure", () => {
+  it("re-throws probe failure without entering the per-repo loop", async () => {
+    await withTestDb(async (db) => {
+      testDb = db;
+      embedProbeCallCount = 0;
+      embedManyCallCount = 0;
+      embedProbeImpl = async () => { throw new Error("connection refused"); };
+
+      const { nwo } = await seedRepoAndOrg(db, "APF2");
+
+      await expect(run(['--all'])).rejects.toThrow("connection refused");
+      expect(embedManyCallCount).toBe(0);
+
+      void nwo; // registered repo exists but loop was never entered
     });
     testDb = null;
   });

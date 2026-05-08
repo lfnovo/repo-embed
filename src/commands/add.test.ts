@@ -5,8 +5,30 @@ import fixture from "./__fixtures__/repository_lfnovo_esperanto.json";
 
 let _testDb: Surreal;
 
+let ghImpl: (query: string, params?: unknown) => Promise<unknown> = async () =>
+  fixture;
 mock.module("../clients/github.ts", () => ({
-  gh: async () => fixture,
+  gh: async (...args: Parameters<typeof ghImpl>) => {
+    try {
+      return await ghImpl(...args);
+    } catch (err: unknown) {
+      if (
+        err !== null &&
+        typeof err === "object" &&
+        "status" in err &&
+        ((err as { status: unknown }).status === 401 ||
+          (err as { status: unknown }).status === 403)
+      ) {
+        const originalMessage =
+          err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `✗ GitHub access denied: ${originalMessage}\n  Hint: token may be expired, missing required scope, or not authorized for this org.`,
+          { cause: err },
+        );
+      }
+      throw err;
+    }
+  },
 }));
 
 mock.module("../clients/surreal.ts", () => ({
@@ -61,6 +83,39 @@ describe("add command", () => {
 
       expect(secondValue).toBe(firstValue);
     });
+  });
+
+  it("persists is_private=true for a private repo", async () => {
+    const privateFixture = {
+      repository: { ...fixture.repository, isPrivate: true },
+    };
+    ghImpl = async () => privateFixture;
+    await withTestDb(async (db) => {
+      _testDb = db;
+
+      await run(["lfnovo/esperanto"]);
+
+      const [repoRows] = await db.query<[Array<{ is_private: boolean }>]>(
+        "SELECT is_private FROM repo WHERE name_with_owner = 'lfnovo/esperanto'",
+      );
+      expect(repoRows.length).toBe(1);
+      expect(repoRows[0].is_private).toBe(true);
+    });
+    ghImpl = async () => fixture;
+  });
+
+  it("rejects with 401 hint when gh throws a 401 error", async () => {
+    ghImpl = async () => {
+      throw Object.assign(new Error("Bad credentials"), { status: 401 });
+    };
+    await withTestDb(async (db) => {
+      _testDb = db;
+
+      await expect(run(["lfnovo/esperanto"])).rejects.toThrow(
+        "token may be expired",
+      );
+    });
+    ghImpl = async () => fixture;
   });
 
   it("exits 1 on bad arg (empty args)", async () => {

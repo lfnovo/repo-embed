@@ -12,8 +12,36 @@ function getGh(): typeof graphql {
   return _gh;
 }
 
-export function gh<T>(query: string, params?: RequestParameters): Promise<T> {
-  return getGh()<T>(query, params);
+export async function gh<T>(query: string, params?: RequestParameters): Promise<T> {
+  try {
+    return await getGh()<T>(query, params);
+  } catch (err: unknown) {
+    if (
+      err !== null &&
+      typeof err === "object" &&
+      "status" in err &&
+      ((err as { status: unknown }).status === 401 ||
+        (err as { status: unknown }).status === 403)
+    ) {
+      const originalMessage = err instanceof Error ? err.message : String(err);
+      // GitHub uses 403 for both auth/scope errors AND rate limits
+      // (primary and secondary/abuse). Don't paint a scope-hint over
+      // a throttle — surface the original error so the operator sees
+      // the rate-limit signal instead of a misleading auth message.
+      const looksLikeRateLimit = /rate limit|abuse|secondary rate/i.test(originalMessage);
+      if (looksLikeRateLimit) {
+        throw err;
+      }
+      const owner = typeof params?.owner === "string" ? params.owner : null;
+      const name = typeof params?.name === "string" ? params.name : null;
+      const repo = owner && name ? ` for ${owner}/${name}` : "";
+      throw new Error(
+        `✗ GitHub access denied${repo}: ${originalMessage}\n  Hint: token may be expired, missing required scope, or not authorized\n        for this org. See README "Private repos" for required scopes.`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
 }
 
 /**
